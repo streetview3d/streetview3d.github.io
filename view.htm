@@ -10,7 +10,7 @@
 <body style="background-color:#000;">
 
 <table style="width:100%; height:100%; color:#fff; font-family: sans-serif; font-size: smaller;">
-<tr><td style="text-align:center; font-weight:bold;">Move: W A S D, Look: Cursor keys&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if($('#ctrlCont').is(':visible')) {$('#ctrlCont').hide(); $(this).text('Show buttons');} else {$('#ctrlCont').show(); $(this).text('Hide buttons');} $(window).resize();">Show buttons</a>&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if(performanceMode) {performanceMode = false; $(this).text('Quality mode on');} else {performanceMode = true; $(this).text('Performance mode on');} $(window).resize();">Quality mode on</a></td></tr>
+<tr><td style="text-align:center; font-weight:bold;">Move: W A S D, Look: Cursor keys&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if($('#ctrlCont').is(':visible')) {$('#ctrlCont').hide(); $(this).text('Show buttons');} else {$('#ctrlCont').show(); $(this).text('Hide buttons');} $(window).resize();">Show buttons</a></td></tr>
 <tr><td id="outCont" style="text-align:center; height:100%;">
 <div id="fail_js">You have to enable Javascript in your browser!</div>
 <div id="fail_data" style="display:none;">Sorry, no Street View data found for this address!</div>
@@ -184,11 +184,21 @@ function Bytes2Float32(bytes) {
 	return sign * significand * Math.pow(2, exponent);
 }
 
+function getParam(param) {
+	regex = new RegExp('[\\?&]' + param + '=([^&#]*)'),
+		result = regex.exec(location.search);
+	return result == null ? '' : decodeURIComponent(result[1].replace(/\+/g, ' '));
+}
+
 var viewPos = [.07,.03],
+	loadPos = viewPos;
 	viewRot = [0,-Math.PI/2],
 	latLng = null,
 	panoId = null,
 	centerHeading = null;
+
+if(getParam('turn') == '1')
+	viewRot[1] += Math.PI;
 
 var zoomLevel = 3,
 	panoSize = [416 << zoomLevel,(416 << zoomLevel) >> 1],
@@ -214,8 +224,8 @@ function load() {
 	var nearestLink = null;
 	var nearestDist = Number.POSITIVE_INFINITY;
 	for(var i = 0; i < links3.length; ++i) {
-		var posLinkDist = $V(viewPos).distanceFrom($V(links3[i][1])),
-			posCenterDist = $V(viewPos).distanceFrom(Vector.Zero(2)),
+		var posLinkDist = $V(loadPos).distanceFrom($V(links3[i][1])),
+			posCenterDist = $V(loadPos).distanceFrom(Vector.Zero(2)),
 			centerLinkDist = Vector.Zero(2).distanceFrom($V(links3[i][1]));
 		if(posLinkDist + centerLinkDist / 2 < posCenterDist
 		&& nearestDist > posLinkDist) {
@@ -263,6 +273,14 @@ function load() {
 	}
 	var steps = [
 		function() {
+			var query = getParam('loc');
+			if(!query.length) {
+				$('#fail_query').show();
+				$('#outImg').hide();
+				abortOnFail = true;
+				throw null;
+			}
+			
 			setTimeout(function() {
 				if(!keyValid)
 					$('#fail_key').show();
@@ -272,16 +290,6 @@ function load() {
 				next();
 			}
 			else {
-				var regex = new RegExp('[\\?&]loc=([^&#]*)'),
-					query = regex.exec(location.search);
-				query = query == null ? '' : decodeURIComponent(query[1].replace(/\+/g, ' '));
-				if(!query.length) {
-					$('#fail_query').show();
-					$('#outImg').hide();
-					abortOnFail = true;
-					throw null;
-				}
-				
 				new google.maps.Geocoder().geocode(
 					{
 						address: query
@@ -425,6 +433,7 @@ function load() {
 			var nextCtr = 1;
 			for(var y1 = 0, y2 = 0; y2 < panoSize[1]; ++y1, y2 += tileSize[1]) {
 				for(var x1 = 0, x2 = 0; x2 < panoSize[0]; ++x1, x2 += tileSize[0]) {
+					nextCtr++;
 					(function(x1,x2,y1,y2) {
 						var tileImg = new Image();
 						tileImg.onload = function() {
@@ -436,7 +445,6 @@ function load() {
 						tileImg.onerror = function() {
 							throw null;
 						}
-						nextCtr++;
 						tileImg.src = 'https://cbk0.google.com/cbk?output=tile&zoom='+zoomLevel+'&x='+x1+'&y='+y1+'&panoid='+panoId;
 					})(x1,x2,y1,y2);
 				}
@@ -449,8 +457,8 @@ function load() {
 		function() {
 			var nextCtr = 1;
 			for(var i = 0; i < links1.length; ++i) {
+				nextCtr++;
 				(function(link) {
-					nextCtr++;
 					$.ajax({
 						url: 'https://maps.google.com/cbk?output=json&dm=1&pm=1&ph=1&panoid='+link[0],
 						dataType: 'jsonp',
@@ -478,105 +486,150 @@ function load() {
 		},
 
 		function() {
-			{
-				for(var ceiling = 0; ceiling < 2; ++ceiling) {
-					for(var pitch = 0; pitch <= 4; ++pitch) {
-						var pitch2 = 1 << pitch,
-							pitch1 = pitch2 >> 1;
-	
-						var yaws = 8 << Math.min(pitch, 3);
-						for(var yaw = 0; yaw < yaws; ++yaw) {
-							var pre = [
-								panoImg.width / yaws,
-								1 / (1 << 4) * 80 / (ceiling ? 77.5 : 2.75),
-								1 / (Math.PI/2) * panoImg.height / 2,
-								1 / yaws * (Math.PI*2),
-								Math.cos(1 / yaws * (Math.PI*2)),
-								1 / (1 << 4) * tex2Size[0] / 2,
-								[tex2Size[0] / 2,tex2Size[1] / 2]
-							],
-							srcCoords1 = [
-								yaw * pre[0],
-								(yaw+1) * pre[0],
-								Math.atan(pitch1 * pre[1]) * pre[2],
-								Math.atan(pitch2 * pre[1]) * pre[2]
-							],
-							srcCoords2 = [
-								ceiling ? srcCoords1[2] : panoImg.height - srcCoords1[2],
-								ceiling ? srcCoords1[3] : panoImg.height - srcCoords1[3]
-							],
-							srcCoords3 = [
-								[srcCoords1[0], srcCoords2[0]],
-								[srcCoords1[0], srcCoords2[1]],
-								[srcCoords1[1], srcCoords2[1]],
-								[srcCoords1[1], srcCoords2[0]]
-							],
-							dstCoords1 = [
-								yaw * pre[3],
-								(yaw+1) * pre[3],
-								pitch1 * pre[5],
-								pitch2 * pre[5]
-							],
-							dstCoords2 = [
-								dstCoords1[2] * (pitch <= 3 && (yaw % 2) ? pre[4] : 1),
-								dstCoords1[2] * (pitch <= 3 && (!(yaw % 2)) ? pre[4] : 1)
-							],
-							dstCoords3 = [
-								radialCoord(pre[6], dstCoords1[0], dstCoords2[0]),
-								radialCoord(pre[6], dstCoords1[0], dstCoords1[3]),
-								radialCoord(pre[6], dstCoords1[1], dstCoords1[3]),
-								radialCoord(pre[6], dstCoords1[1], dstCoords2[1])
-							];
-							transformQuad(panoImg, srcCoords3, ceiling ? tex1[2] : tex1[1], dstCoords3, !pitch);
-						}
-					}
+			var nextCtr = 1;
+
+			var callList1 = [];
+			var callList2 = [];
+
+			function async1() {
+				if(callList1.length == 0)
+					return;
+				
+				var params = callList1.pop(),
+					ceiling = params[0],
+					yaws = params[1],
+					pitch = params[2],
+					pitch1 = params[3],
+					pitch2 = params[4];
+					
+				for(var yaw = 0; yaw < yaws; ++yaw) {
+					var pre = [
+						panoImg.width / yaws,
+						1 / (1 << 3) * 80 / (ceiling ? 77.5 : 2.75),
+						1 / (Math.PI/2) * panoImg.height / 2,
+						1 / yaws * (Math.PI*2),
+						Math.cos(1 / yaws * (Math.PI*2)),
+						1 / (1 << 3) * tex2Size[0] / 2,
+						[tex2Size[0] / 2,tex2Size[1] / 2]
+					],
+					srcCoords1 = [
+						yaw * pre[0],
+						(yaw+1) * pre[0],
+						Math.atan(pitch1 * pre[1]) * pre[2],
+						Math.atan(pitch2 * pre[1]) * pre[2]
+					],
+					srcCoords2 = [
+						ceiling ? srcCoords1[2] : panoImg.height - srcCoords1[2],
+						ceiling ? srcCoords1[3] : panoImg.height - srcCoords1[3]
+					],
+					srcCoords3 = [
+						[srcCoords1[0], srcCoords2[0]],
+						[srcCoords1[0], srcCoords2[1]],
+						[srcCoords1[1], srcCoords2[1]],
+						[srcCoords1[1], srcCoords2[0]]
+					],
+					dstCoords1 = [
+						yaw * pre[3],
+						(yaw+1) * pre[3],
+						pitch1 * pre[5],
+						pitch2 * pre[5]
+					],
+					dstCoords2 = [
+						dstCoords1[2] * (pitch <= 3 && (yaw % 2) ? pre[4] : 1),
+						dstCoords1[2] * (pitch <= 3 && (!(yaw % 2)) ? pre[4] : 1)
+					],
+					dstCoords3 = [
+						radialCoord(pre[6], dstCoords1[0], dstCoords2[0]),
+						radialCoord(pre[6], dstCoords1[0], dstCoords1[3]),
+						radialCoord(pre[6], dstCoords1[1], dstCoords1[3]),
+						radialCoord(pre[6], dstCoords1[1], dstCoords2[1])
+					];
+					transformQuad(panoImg, srcCoords3, ceiling ? tex1[2] : tex1[1], dstCoords3, !pitch);
+				}
+				
+				setTimeout(async1, 1);
+			
+				if(!--nextCtr)
+					next();
+			}
+			
+			for(var ceiling = 0; ceiling < 2; ++ceiling) {
+				for(var pitch = 0; pitch < 4; ++pitch) {
+					var pitch2 = 1 << pitch,
+						pitch1 = pitch2 >> 1,
+						yaws = 4 << Math.min(pitch, 3);
+					
+					nextCtr++;
+					callList1.push([ceiling, yaws, pitch, pitch1, pitch2]);
 				}
 			}
 			
-			{
+			function async2() {
+				if(callList2.length == 0)
+					return;
+				
+				var params = callList2.pop(),
+					pitch = params[0];
+				
 				for(var yaw = 0; yaw < 32; ++yaw) {
-					for(var pitch = 0; pitch < 8; ++pitch) {
-						var pre = [
-							panoImg.width / 32,
-							1 / (Math.PI/2) * panoImg.height / 2
-						],
-						srcCoords1 = [
-							yaw * pre[0],
-							(yaw+1) * pre[0],
-							(pitch * 10 - 2.75),
-							((pitch+1) * 10 - 2.75),
-							walls1[yaw],
-							walls1[(yaw+1) % 32]
-						],
-						srcCoords2 = [
-							panoImg.height / 2 - Math.atan(srcCoords1[2] / srcCoords1[4]) * pre[1],
-							panoImg.height / 2 - Math.atan(srcCoords1[3] / srcCoords1[4]) * pre[1],
-							panoImg.height / 2 - Math.atan(srcCoords1[3] / srcCoords1[5]) * pre[1],
-							panoImg.height / 2 - Math.atan(srcCoords1[2] / srcCoords1[5]) * pre[1]
-						],
-						srcCoords3 = [
-							[srcCoords1[0], srcCoords2[0]],
-							[srcCoords1[0], srcCoords2[1]],
-							[srcCoords1[1], srcCoords2[2]],
-							[srcCoords1[1], srcCoords2[3]]
-						],
-						dstCoords1 = [
-							yaw * pre[0],
-							(yaw+1) * pre[0],
-							tex1Size[1] - pitch * tex1Size[1] / 8,
-							tex1Size[1] - (pitch+1) * tex1Size[1] / 8
-						],
-						dstCoords2 = [
-							[dstCoords1[0], dstCoords1[2]],
-							[dstCoords1[0], dstCoords1[3]],
-							[dstCoords1[1], dstCoords1[3]],
-							[dstCoords1[1], dstCoords1[2]]
-						];
-						transformQuad(panoImg, srcCoords3, tex1[0], dstCoords2, false);
-					}
+					var pre = [
+						panoImg.width / 32,
+						1 / (Math.PI/2) * panoImg.height / 2
+					],
+					srcCoords1 = [
+						yaw * pre[0],
+						(yaw+1) * pre[0],
+						(pitch * 20 - 2.75),
+						((pitch+1) * 20 - 2.75),
+						walls1[yaw],
+						walls1[(yaw+1) % 32]
+					],
+					srcCoords2 = [
+						panoImg.height / 2 - Math.atan(srcCoords1[2] / srcCoords1[4]) * pre[1],
+						panoImg.height / 2 - Math.atan(srcCoords1[3] / srcCoords1[4]) * pre[1],
+						panoImg.height / 2 - Math.atan(srcCoords1[3] / srcCoords1[5]) * pre[1],
+						panoImg.height / 2 - Math.atan(srcCoords1[2] / srcCoords1[5]) * pre[1]
+					],
+					srcCoords3 = [
+						[srcCoords1[0], srcCoords2[0]],
+						[srcCoords1[0], srcCoords2[1]],
+						[srcCoords1[1], srcCoords2[2]],
+						[srcCoords1[1], srcCoords2[3]]
+					],
+					dstCoords1 = [
+						yaw * pre[0],
+						(yaw+1) * pre[0],
+						tex1Size[1] - pitch * tex1Size[1] / 4,
+						tex1Size[1] - (pitch+1) * tex1Size[1] / 4
+					],
+					dstCoords2 = [
+						[dstCoords1[0], dstCoords1[2]],
+						[dstCoords1[0], dstCoords1[3]],
+						[dstCoords1[1], dstCoords1[3]],
+						[dstCoords1[1], dstCoords1[2]]
+					];
+					transformQuad(panoImg, srcCoords3, tex1[0], dstCoords2, false);
 				}
+				
+				setTimeout(async2, 1);
+				
+				if(!--nextCtr)
+					next();
 			}
+			
+			for(var pitch = 0; pitch < 4; ++pitch) {
+				nextCtr++;
+				callList2.push([pitch]);
+			}
+			
+			setTimeout(async1, 1);
+			setTimeout(async2, 1);
 
+			if(!--nextCtr)
+				next();
+		},
+
+		function() {
 			var reload = false;
 			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180);
 			var vec = $V(viewPos).subtract(linkPos).rotate(-rotDiff, [0,0]);
@@ -1215,12 +1268,12 @@ function update() {
 	
 	out.drawImage(bufImg,0,0);
 
-	if(fade) {
+	/*if(fade) {
 		$('#outImg').finish();
 		$('#outImg').fadeTo(0,.5);
 		$('#outImg').fadeTo(500,1);
 		fade = false;
-	}
+	}*/
 	
 	isUpdating = false;
 	if(requiresUpdate)
@@ -1228,10 +1281,14 @@ function update() {
 }
 
 function move(x,z) {
-	var vec = $V([x,z]).rotate(-viewRot[1], [0,0]);
+	var vec = $V([x*2,z*2]).rotate(-viewRot[1], [0,0]);
 	
 	viewPos[0] += vec.elements[0];
 	viewPos[1] += vec.elements[1];
+
+	loadPos = [viewPos[0],viewPos[1]];
+	loadPos[0] += vec.elements[0]*40;
+	loadPos[1] += vec.elements[1]*40;
 	
 	setTimeout(load, 1);
 }
@@ -1279,7 +1336,7 @@ function handlePressed() {
 	pressedOnce = [];
 	if(isPressed){
 		setTimeout(update, 1);
-		setTimeout(handlePressed, 100);
+		setTimeout(handlePressed, 500);
 	}
 	else {
 		pressedTimer = false;
