@@ -1,0 +1,1344 @@
+<html>
+<head>
+<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+<script type="text/javascript">alert = function() {};</script>
+<script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDtlKIl02bk1ebAl4zYhC3gx5l5BkzxSSQ&sensor=false"></script>
+<script type="text/javascript" src="jquery-1.11.1.min.js"></script>
+<script type="text/javascript" src="pako_inflate.min.js"></script>
+<script type="text/javascript" src="sylvester.js"></script> 
+</head>
+<body style="background-color:#000;">
+
+<table style="width:100%; height:100%; color:#fff; font-family: sans-serif; font-size: smaller;">
+<tr><td style="text-align:center; font-weight:bold;">Move: W A S D, Look: Cursor keys&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if($('#ctrlCont').is(':visible')) {$('#ctrlCont').hide(); $(this).text('Show buttons');} else {$('#ctrlCont').show(); $(this).text('Hide buttons');} $(window).resize();">Show buttons</a>&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if(performanceMode) {performanceMode = false; $(this).text('Quality mode on');} else {performanceMode = true; $(this).text('Performance mode on');} $(window).resize();">Quality mode on</a></td></tr>
+<tr><td id="outCont" style="text-align:center; height:100%;">
+<div id="fail_js">You have to enable Javascript in your browser!</div>
+<div id="fail_data" style="display:none;">Sorry, no Street View data found for this address!</div>
+<div id="fail_query" style="display:none;">Specify the address or location in the browser's address bar, e.g. <span style="color:#ccf;">https://streetview3d.github.io/view.htm?loc=ABC, DEF 12345, USA</span> or <span style="color:#ccf;">https://streetview3d.github.io/view.htm?loc=40.263809,-77.438736</span></div>
+<div id="fail_gen" style="display:none;">Something went wrong...</div>
+<div id="fail_key" style="display:none;">Sorry, it seems that Google has revoked my API Key...</div>
+<canvas id="outImg">You have to look for a browser, which supports HTML5!</canvas>
+</td></tr>
+<tr><td><div id="ctrlCont" style="text-align:center; font-weight:bold; white-space:nowrap; display:none;">
+Move:
+<input type="button" value="<" style="width:3em; height:3em;" onmousedown="keydownHandler(65)" onmouseup="keyupHandler(65)" onmouseout="keyupHandler(65)" />
+&nbsp;
+<input type="button" value="/\" style="width:3em; height:3em;" onmousedown="keydownHandler(87)" onmouseup="keyupHandler(87)" onmouseout="keyupHandler(87)" />
+&nbsp;
+<input type="button" value="\/" style="width:3em; height:3em;" onmousedown="keydownHandler(83)" onmouseup="keyupHandler(83)" onmouseout="keyupHandler(83)" />
+&nbsp;
+<input type="button" value=">" style="width:3em; height:3em;" onmousedown="keydownHandler(68)" onmouseup="keyupHandler(68)" onmouseout="keyupHandler(68)" />
+&nbsp;
+Look:
+<input type="button" value="<" style="width:3em; height:3em;" onmousedown="keydownHandler(37)" onmouseup="keyupHandler(37)" onmouseout="keyupHandler(37)" />
+&nbsp;
+<input type="button" value="/\" style="width:3em; height:3em;" onmousedown="keydownHandler(40)" onmouseup="keyupHandler(40)" onmouseout="keyupHandler(40)" />
+&nbsp;
+<input type="button" value="\/" style="width:3em; height:3em;" onmousedown="keydownHandler(38)" onmouseup="keyupHandler(38)" onmouseout="keyupHandler(38)" />
+&nbsp;
+<input type="button" value=">" style="width:3em; height:3em;" onmousedown="keydownHandler(39)" onmouseup="keyupHandler(39)" onmouseout="keyupHandler(39)" />
+</div></td></tr>
+</table>
+
+<script type="text/javascript">
+var keydownHandler = function() {},
+	keyupHandler = function() {},
+	performanceMode = false;
+$(function() {
+
+var abortOnFail = false;
+$('#fail_js').hide();
+
+jQuery.fx.interval = Math.max(jQuery.fx.interval, 50);
+
+function radialCoord(center, angle, radius) {
+	return [
+		center[0] + Math.cos(angle) * radius,
+		center[1] + Math.sin(angle) * radius
+	];
+}
+
+function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
+	var middle = [
+		(dstCoords[0][0] + dstCoords[1][0] + dstCoords[2][0]) / 3,
+		(dstCoords[0][1] + dstCoords[1][1] + dstCoords[2][1]) / 3
+	];
+	
+	dstCtx.save();
+
+	var vec1 = [
+			$V(dstCoords[0]),
+			$V(dstCoords[1]),
+			$V(dstCoords[2])
+		],
+		vec2 = [
+			vec1[1].subtract(vec1[0]),
+			vec1[2].subtract(vec1[1]),
+			vec1[0].subtract(vec1[2])
+		],
+		dstPre1 = [
+			vec1[1].distanceFrom(vec1[2]),
+			vec1[2].distanceFrom(vec1[0]),
+			vec1[0].distanceFrom(vec1[1]),
+			Math.cos(Math.PI/2 - vec2[0].angleFrom(vec2[2].x(-1)) / 2),
+			Math.cos(Math.PI/2 - vec2[1].angleFrom(vec2[0].x(-1)) / 2),
+			Math.cos(Math.PI/2 - vec2[2].angleFrom(vec2[1].x(-1)) / 2)
+		],
+		dstCenter = vec1[0].x(dstPre1[0]).add(vec1[1].x(dstPre1[1])).add(vec1[2].x(dstPre1[2])).x(1 / (dstPre1[0] + dstPre1[1] + dstPre1[2])),
+		dstPre2 = [
+			vec1[0].subtract(dstCenter),
+			vec1[1].subtract(dstCenter),
+			vec1[2].subtract(dstCenter),
+			vec1[0].distanceFrom(dstCenter),
+			vec1[1].distanceFrom(dstCenter),
+			vec1[2].distanceFrom(dstCenter)
+		];
+	
+	for(var i = 0; i < 3; ++i) {
+		dstCoords[i] = dstPre2[i].x((dstPre2[i + 3] + Math.min(.5 / dstPre1[i + 3], 3)) / dstPre2[i + 3]).add(dstCenter).elements;
+	}
+	
+	dstCtx.beginPath();
+	dstCtx.moveTo(dstCoords[0][0], dstCoords[0][1]);
+	dstCtx.lineTo(dstCoords[1][0], dstCoords[1][1]);
+	dstCtx.lineTo(dstCoords[2][0], dstCoords[2][1]);
+	dstCtx.closePath();
+	dstCtx.clip();
+	
+	var x0 = dstCoords[0][0],
+		y0 = dstCoords[0][1],
+		x1 = dstCoords[1][0] - x0,
+		y1 = dstCoords[1][1] - y0,
+		x2 = dstCoords[2][0] - x0,
+		y2 = dstCoords[2][1] - y0,
+		u0 = srcCoords[0][0],
+		v0 = srcCoords[0][1],
+		u1 = srcCoords[1][0] - u0,
+		v1 = srcCoords[1][1] - v0,
+		u2 = srcCoords[2][0] - u0,
+		v2 = srcCoords[2][1] - v0;
+	
+	var denom = (u1*v2 - u2*v1);
+	if(denom != 0) {
+		var det = 1 / denom,
+			a = (v2*x1 - v1*x2) * det,
+			b = (v2*y1 - v1*y2) * det,
+			c = (u1*x2 - u2*x1) * det,
+			d = (u1*y2 - u2*y1) * det,
+			e = x0 - a*u0 - c*v0,
+			f = y0 - b*u0 - d*v0;
+		
+		dstCtx.transform(a, b, c, d, e, f);
+		
+		var bx0 = Math.max(Math.floor(Math.min(srcCoords[0][0], srcCoords[1][0], srcCoords[2][0])), 0),
+			by0 = Math.max(Math.floor(Math.min(srcCoords[0][1], srcCoords[1][1], srcCoords[2][1])), 0),
+			bx1 = Math.min(Math.ceil(Math.max(srcCoords[0][0], srcCoords[1][0], srcCoords[2][0])), srcImg.width),
+			by1 = Math.min(Math.ceil(Math.max(srcCoords[0][1], srcCoords[1][1], srcCoords[2][1])), srcImg.height);
+		dstCtx.drawImage(srcImg, bx0, by0, bx1 - bx0, by1 - by0, bx0, by0, bx1 - bx0, by1 - by0);
+	}
+	
+	dstCtx.restore();
+
+	/*if(wireframe) {
+		dstCtx.strokeStyle = '#fff';
+		dstCtx.lineWidth = 1;
+		dstCtx.beginPath();
+		dstCtx.moveTo(dstCoords[0][0],dstCoords[0][1]);
+		dstCtx.lineTo(dstCoords[1][0],dstCoords[1][1]);
+		dstCtx.lineTo(dstCoords[2][0],dstCoords[2][1]);
+		dstCtx.closePath();
+		dstCtx.stroke();
+	}*/
+}
+
+function transformQuad(srcCtx, srcCoords, dstCtx, dstCoords, center) {
+	var srcMiddle = [
+			(srcCoords[0][0] + srcCoords[1][0] + srcCoords[2][0] + srcCoords[3][0]) / 4,
+			(srcCoords[0][1] + srcCoords[1][1] + srcCoords[2][1] + srcCoords[3][1]) / 4
+		],
+		dstMiddle = [
+			(dstCoords[0][0] + dstCoords[1][0] + dstCoords[2][0] + dstCoords[3][0]) / 4,
+			(dstCoords[0][1] + dstCoords[1][1] + dstCoords[2][1] + dstCoords[3][1]) / 4
+		];
+	transformTriangle(srcCtx, [srcCoords[0], srcCoords[1], srcMiddle], dstCtx, [dstCoords[0], dstCoords[1], dstMiddle], false);
+	transformTriangle(srcCtx, [srcCoords[1], srcCoords[2], srcMiddle], dstCtx, [dstCoords[1], dstCoords[2], dstMiddle], false);
+	transformTriangle(srcCtx, [srcCoords[2], srcCoords[3], srcMiddle], dstCtx, [dstCoords[2], dstCoords[3], dstMiddle], false);
+	if(!center)
+		transformTriangle(srcCtx, [srcCoords[3], srcCoords[0], srcMiddle], dstCtx, [dstCoords[3], dstCoords[0], dstMiddle], false);
+}
+
+function Bytes2Float32(bytes) {
+	var sign = (bytes & 0x80000000) ? -1 : 1,
+		exponent = ((bytes >> 23) & 0xFF) - 127,
+		significand = (bytes & ~(-1 << 23));
+
+	if (exponent == 128) 
+		return sign * ((significand) ? Number.NaN : Number.POSITIVE_INFINITY);
+
+	if (exponent == -127) {
+		if (significand == 0) return sign * 0.0;
+		exponent = -126;
+		significand /= (1 << 22);
+	} else significand = (significand | (1 << 23)) / (1 << 23);
+
+	return sign * significand * Math.pow(2, exponent);
+}
+
+var viewPos = [.07,.03],
+	viewRot = [0,-Math.PI/2],
+	latLng = null,
+	panoId = null,
+	centerHeading = null;
+
+var zoomLevel = 3,
+	panoSize = [416 << zoomLevel,(416 << zoomLevel) >> 1],
+	tileSize = [512, 512],
+	tex1Size = [panoSize[0],panoSize[1] >> 1],
+	tex2Size = [panoSize[0] >> 1,panoSize[0] >> 1];
+	
+var texImg2 = null,
+	tex2 = null,
+	walls3 = null,
+	links3 = [];
+
+var isLoading = false;
+
+function load() {
+	if(isLoading)
+		return;
+	isLoading = true;
+	
+	var linkPos = [0,0];
+	var previousCenterHeading = centerHeading;
+	
+	var nearestLink = null;
+	var nearestDist = Number.POSITIVE_INFINITY;
+	for(var i = 0; i < links3.length; ++i) {
+		var posLinkDist = $V(viewPos).distanceFrom($V(links3[i][1])),
+			posCenterDist = $V(viewPos).distanceFrom(Vector.Zero(2)),
+			centerLinkDist = Vector.Zero(2).distanceFrom($V(links3[i][1]));
+		if(posLinkDist + centerLinkDist / 2 < posCenterDist
+		&& nearestDist > posLinkDist) {
+			nearestLink = links3[i];
+			nearestDist = posLinkDist;
+			panoId = links3[i][0];
+			linkPos = links3[i][1];
+		}
+	}
+	
+	if(panoId != null && nearestLink == null) {
+		isLoading = false;
+		return;
+	}
+	
+	var texImg1 = [
+		document.createElement('canvas'),
+		document.createElement('canvas'),
+		document.createElement('canvas')
+	];
+	
+	texImg1[0].width = tex1Size[0];
+	texImg1[0].height = tex1Size[1];
+	texImg1[1].width = tex2Size[0];
+	texImg1[1].height = tex2Size[1];
+	texImg1[2].width = tex2Size[0];
+	texImg1[2].height = tex2Size[1];
+	
+	var tex1 = [
+		texImg1[0].getContext('2d'),
+		texImg1[1].getContext('2d'),
+		texImg1[2].getContext('2d')
+	];
+	
+	var keyValid = false,
+		panoImg,
+		walls1,
+		links1 = [],
+		links2 = [];
+
+	var step = 0;
+	function next() {
+		if(step < steps.length)
+			setTimeout(steps[step++], 1);
+	}
+	var steps = [
+		function() {
+			setTimeout(function() {
+				if(!keyValid)
+					$('#fail_key').show();
+			}, 4000);
+
+			if(panoId != null) {
+				next();
+			}
+			else {
+				var regex = new RegExp('[\\?&]loc=([^&#]*)'),
+					query = regex.exec(location.search);
+				query = query == null ? '' : decodeURIComponent(query[1].replace(/\+/g, ' '));
+				if(!query.length) {
+					$('#fail_query').show();
+					$('#outImg').hide();
+					abortOnFail = true;
+					throw null;
+				}
+				
+				new google.maps.Geocoder().geocode(
+					{
+						address: query
+					},
+					function(data) {
+						try {
+							latLng = data[0].geometry.location;
+						}
+						catch(e) {
+							$('#fail_data').show();
+							$('#fail_query').show();
+							$('#outImg').hide();
+							abortOnFail = true;
+							throw e;
+						}
+		
+						next();
+					}
+				);
+			}
+		},
+
+		function() {
+			var success = function(data) {
+				keyValid = true;
+				$('#fail_key').hide();
+	
+				try {
+					panoId = data.location.pano;
+					centerHeading = data.tiles.centerHeading;
+					
+					for(var i = 0; i < data.links.length; ++i) {
+						links1[i] = [
+							data.links[i].pano,
+							data.links[i].heading
+						];
+					}
+				}
+				catch(e) {
+					$('#fail_data').show();
+					$('#fail_query').show();
+					$('#outImg').hide();
+					abortOnFail = true;
+					throw e;
+				}
+	
+				next();
+			}
+			
+			if(panoId != null) {
+				new google.maps.StreetViewService().getPanoramaById(
+					panoId,
+					success
+				);
+			}
+			else {
+				new google.maps.StreetViewService().getPanoramaByLocation(
+					latLng,
+					50,
+					success
+				);
+			}
+		},
+
+		function() {
+			$.ajax({
+				url: 'https://maps.google.com/cbk?output=json&dm=1&pm=1&ph=1&panoid='+panoId,
+				dataType: 'jsonp',
+				error: function() {
+					throw null;
+				},
+				success: function(data) {
+					latLng = new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng);
+					
+					var depthMap1 = data.model.depth_map;
+		
+					depthMap1 = depthMap1.replace(/-/g,'+');
+					depthMap1 = depthMap1.replace(/_/g,'/');
+					depthMap1 = atob(depthMap1);
+					depthMap1 = pako.inflate(depthMap1);
+		
+					var planeCount = (depthMap1[2] << 8) | depthMap1[1];
+					var width = (depthMap1[4] << 8) | depthMap1[3];
+					var height = (depthMap1[6] << 8) | depthMap1[5];
+					var offset = (depthMap1[8] << 8) | depthMap1[7];
+		
+					var depthMap2 = [];
+					for(var i = 0; i < planeCount; ++i) {
+						depthMap2[i] = [];
+						for(var j = 0; j < 4; ++j) {
+							var pos = width * height + offset + i * 16 + j * 4;
+							depthMap2[i][j] = Bytes2Float32((depthMap1[pos+3] << 24) | (depthMap1[pos+2] << 16) | (depthMap1[pos+1] << 8) | depthMap1[pos]);
+						}
+					}
+		
+					var depthMap4 = [];
+					for(var yaw = 0; yaw <= 32; ++yaw) {
+						var depthMap3 = [];
+						for(var pitch = 2; pitch <= 4; ++pitch) {
+							var x = yaw * width / 32,
+								y = height / 2 - (pitch - 2) * height / 32,
+								index = depthMap1[offset + y * width + x];
+							var depth = 100;
+							if(index > 0) {
+								var phi = (width - x - 1) / (width - 1) * 2 * Math.PI + Math.PI/2;
+								var theta = (height - y - 1) / (height - 1) * Math.PI;
+								var v = [
+									Math.sin(theta) * Math.cos(phi),
+									Math.sin(theta) * Math.sin(phi),
+									Math.cos(theta)
+								];
+					
+								var plane = depthMap2[index];
+								var t = plane[3] / (v[0]*plane[0] + v[1]*plane[1] + v[2]*plane[2]);
+								v[0] *= t;
+								v[1] *= t;
+								v[2] *= t;
+								depth = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+								depth = Math.max(depth, 4);
+								depth = Math.min(depth, 100);
+							}
+							depthMap3[pitch] = depth;
+						}
+			
+						depthMap4[yaw] = (depthMap3[2]*4 + depthMap3[3]*2 + depthMap3[4]) / 7;
+						depthMap4[yaw] = Math.min(depthMap4[yaw], 70);
+					}
+		
+					walls1 = depthMap4;
+		
+					next();
+				}
+			});
+		},
+
+		function() {
+			panoImg = document.createElement('canvas');
+			panoImg.width = panoSize[0];
+			panoImg.height = panoSize[1];
+
+			var nextCtr = 1;
+			for(var y1 = 0, y2 = 0; y2 < panoSize[1]; ++y1, y2 += tileSize[1]) {
+				for(var x1 = 0, x2 = 0; x2 < panoSize[0]; ++x1, x2 += tileSize[0]) {
+					(function(x1,x2,y1,y2) {
+						var tileImg = new Image();
+						tileImg.onload = function() {
+							panoImg.getContext('2d').drawImage(tileImg,x2,y2);
+				
+							if(!--nextCtr)
+								next();
+						}
+						tileImg.onerror = function() {
+							throw null;
+						}
+						nextCtr++;
+						tileImg.src = 'https://cbk0.google.com/cbk?output=tile&zoom='+zoomLevel+'&x='+x1+'&y='+y1+'&panoid='+panoId;
+					})(x1,x2,y1,y2);
+				}
+			}
+
+			if(!--nextCtr)
+				next();
+		},
+
+		function() {
+			var nextCtr = 1;
+			for(var i = 0; i < links1.length; ++i) {
+				(function(link) {
+					nextCtr++;
+					$.ajax({
+						url: 'https://maps.google.com/cbk?output=json&dm=1&pm=1&ph=1&panoid='+link[0],
+						dataType: 'jsonp',
+						error: function() {
+							throw null;
+						},
+						success: function(data) {
+							var dist = Math.min(google.maps.geometry.spherical.computeDistanceBetween(latLng, new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)), 50);
+							var vec = $V([0,dist]).rotate(-((link[1] - centerHeading) * (Math.PI/180) - (Math.PI/2)), [0,0]);
+						
+							links2.push([
+								link[0],
+								vec.elements
+							]);
+							
+							if(!--nextCtr)
+								next();
+						}
+					});
+				})(links1[i]);
+			}
+
+			if(!--nextCtr)
+				next();
+		},
+
+		function() {
+			{
+				for(var ceiling = 0; ceiling < 2; ++ceiling) {
+					for(var pitch = 0; pitch <= 4; ++pitch) {
+						var pitch2 = 1 << pitch,
+							pitch1 = pitch2 >> 1;
+	
+						var yaws = 8 << Math.min(pitch, 3);
+						for(var yaw = 0; yaw < yaws; ++yaw) {
+							var pre = [
+								panoImg.width / yaws,
+								1 / (1 << 4) * 80 / (ceiling ? 77.5 : 2.75),
+								1 / (Math.PI/2) * panoImg.height / 2,
+								1 / yaws * (Math.PI*2),
+								Math.cos(1 / yaws * (Math.PI*2)),
+								1 / (1 << 4) * tex2Size[0] / 2,
+								[tex2Size[0] / 2,tex2Size[1] / 2]
+							],
+							srcCoords1 = [
+								yaw * pre[0],
+								(yaw+1) * pre[0],
+								Math.atan(pitch1 * pre[1]) * pre[2],
+								Math.atan(pitch2 * pre[1]) * pre[2]
+							],
+							srcCoords2 = [
+								ceiling ? srcCoords1[2] : panoImg.height - srcCoords1[2],
+								ceiling ? srcCoords1[3] : panoImg.height - srcCoords1[3]
+							],
+							srcCoords3 = [
+								[srcCoords1[0], srcCoords2[0]],
+								[srcCoords1[0], srcCoords2[1]],
+								[srcCoords1[1], srcCoords2[1]],
+								[srcCoords1[1], srcCoords2[0]]
+							],
+							dstCoords1 = [
+								yaw * pre[3],
+								(yaw+1) * pre[3],
+								pitch1 * pre[5],
+								pitch2 * pre[5]
+							],
+							dstCoords2 = [
+								dstCoords1[2] * (pitch <= 3 && (yaw % 2) ? pre[4] : 1),
+								dstCoords1[2] * (pitch <= 3 && (!(yaw % 2)) ? pre[4] : 1)
+							],
+							dstCoords3 = [
+								radialCoord(pre[6], dstCoords1[0], dstCoords2[0]),
+								radialCoord(pre[6], dstCoords1[0], dstCoords1[3]),
+								radialCoord(pre[6], dstCoords1[1], dstCoords1[3]),
+								radialCoord(pre[6], dstCoords1[1], dstCoords2[1])
+							];
+							transformQuad(panoImg, srcCoords3, ceiling ? tex1[2] : tex1[1], dstCoords3, !pitch);
+						}
+					}
+				}
+			}
+			
+			{
+				for(var yaw = 0; yaw < 32; ++yaw) {
+					for(var pitch = 0; pitch < 8; ++pitch) {
+						var pre = [
+							panoImg.width / 32,
+							1 / (Math.PI/2) * panoImg.height / 2
+						],
+						srcCoords1 = [
+							yaw * pre[0],
+							(yaw+1) * pre[0],
+							(pitch * 10 - 2.75),
+							((pitch+1) * 10 - 2.75),
+							walls1[yaw],
+							walls1[(yaw+1) % 32]
+						],
+						srcCoords2 = [
+							panoImg.height / 2 - Math.atan(srcCoords1[2] / srcCoords1[4]) * pre[1],
+							panoImg.height / 2 - Math.atan(srcCoords1[3] / srcCoords1[4]) * pre[1],
+							panoImg.height / 2 - Math.atan(srcCoords1[3] / srcCoords1[5]) * pre[1],
+							panoImg.height / 2 - Math.atan(srcCoords1[2] / srcCoords1[5]) * pre[1]
+						],
+						srcCoords3 = [
+							[srcCoords1[0], srcCoords2[0]],
+							[srcCoords1[0], srcCoords2[1]],
+							[srcCoords1[1], srcCoords2[2]],
+							[srcCoords1[1], srcCoords2[3]]
+						],
+						dstCoords1 = [
+							yaw * pre[0],
+							(yaw+1) * pre[0],
+							tex1Size[1] - pitch * tex1Size[1] / 8,
+							tex1Size[1] - (pitch+1) * tex1Size[1] / 8
+						],
+						dstCoords2 = [
+							[dstCoords1[0], dstCoords1[2]],
+							[dstCoords1[0], dstCoords1[3]],
+							[dstCoords1[1], dstCoords1[3]],
+							[dstCoords1[1], dstCoords1[2]]
+						];
+						transformQuad(panoImg, srcCoords3, tex1[0], dstCoords2, false);
+					}
+				}
+			}
+
+			var reload = false;
+			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180);
+			var vec = $V(viewPos).subtract(linkPos).rotate(-rotDiff, [0,0]);
+			var dist = vec.distanceFrom(Vector.Zero(2));
+			if(dist > 40) {
+				vec = vec.x(40/dist);
+				reload = true;
+			}
+			viewPos = vec.elements;
+			viewRot[1] += rotDiff;
+			
+			var walls2 = [];
+			var mergeNext = false;
+			for(var i = 0; i < 32; ++i) {
+				if(mergeNext
+				&& i >= 1 && i < 31
+				&& walls1[i - 1] <= 30 && walls1[i] <= 30 && walls1[i + 1] <= 30
+				&& Math.abs(walls1[i - 1] - walls1[i + 1]) <= 3) {
+					mergeNext = false;
+					continue;
+				}
+	
+				walls2.push([
+					radialCoord([0,0], -(i / 32 * (Math.PI*2)), walls1[i]),
+					i
+				]);
+				mergeNext = true;
+			}
+			
+			tex2 = tex1;
+			texImg2 = texImg1;
+			links3 = links2;
+			walls3 = walls2;
+
+			fade = true;
+			setTimeout(update, 1);
+			
+			isLoading = false;
+			if(reload)
+				setTimeout(load, 1);
+		}
+	];
+	next();
+}
+
+var isUpdating = false,
+	requiresUpdate = false,
+	fade = false;
+
+function update() {
+	if(tex2 == null || texImg2 == null || walls3 == null)
+		return;
+	
+	requiresUpdate = true;
+	if(isUpdating)
+		return;
+	isUpdating = true;
+	requiresUpdate = false;
+	
+	var outImg = $('#outImg')[0];
+	outImg.width = 1;
+	outImg.height = 1;
+	var outSize = [
+		Math.min($('#outCont').width(), $('#outCont').height()/3*4),
+		Math.min($('#outCont').height(), $('#outCont').width()/4*3)
+	];
+	
+	var bufImg = document.createElement('canvas');
+	bufImg.width = outSize[0];
+	bufImg.height = outSize[1];
+	var buf = bufImg.getContext('2d');
+	
+	outImg.width = outSize[0];
+	outImg.height = outSize[1];
+	var out = outImg.getContext('2d');
+	
+	buf.fillStyle = '#000';
+	buf.fillRect(0, 0, outSize[0], outSize[1]);
+	
+	var vec = $V(viewPos);
+	var dist = vec.distanceFrom(Vector.Zero(2));
+	if(dist > 70) {
+		vec = vec.x(70/dist);
+		viewPos = vec.elements;
+	}
+	
+	viewRot[0] = Math.max(viewRot[0], -Math.PI/2);
+	viewRot[0] = Math.min(viewRot[0], Math.PI/2);
+	viewRot[1] %= Math.PI*2;
+	
+	var cx = Math.cos(viewRot[0]),
+		sx = Math.sin(viewRot[0]),
+		cy = Math.cos(-viewRot[1]),
+		sy = Math.sin(-viewRot[1]);
+	
+	var viewMatrix = Matrix.I(4);
+	viewMatrix = viewMatrix.x($M([
+		[1,0,0,0],
+		[0,1,0,0],
+		[0,0,1,0],
+		[-viewPos[0],-5,-viewPos[1],1]
+	]));
+	viewMatrix = viewMatrix.x($M([
+		[cy,0,-sy,0],
+		[0,1,0,0],
+		[sy,0,cy,0],
+		[0,0,0,1]
+	]));
+	viewMatrix = viewMatrix.x($M([
+		[1,0,0,0],
+		[0,cx,sx,0],
+		[0,-sx,cx,0],
+		[0,0,0,1]
+	]));
+	
+	var projMatrix = $M([
+		[.75,0,0,0],
+		[0,1,0,0],
+		[0,0,1,1],
+		[0,0,0,0]
+	]);
+	
+	var groundTbl = performanceMode ? [
+		-8,
+		-2,
+		2,
+		8
+	] : [
+		-8,
+		-3,
+		-1,
+		0,
+		1,
+		3,
+		8
+	];
+	var ground = [];
+	for(var i = 0; i < groundTbl.length; ++i) {
+		var i1 = groundTbl[i],
+			i2 = groundTbl[i + 1];
+		
+		for(var j = 0; j < groundTbl.length; ++j) {
+			var j1 = groundTbl[j],
+				j2 = groundTbl[j + 1];
+			
+			var pre = [
+				tex2Size[0] / 2,
+				tex2Size[1] / 2,
+				tex2Size[0] / 16,
+				tex2Size[1] / 16
+			],
+			srcVerts1 = [
+				pre[0] + j1 * pre[2],
+				pre[0] + j2 * pre[2],
+				pre[1] - i1 * pre[3],
+				pre[1] - i2 * pre[3],
+			],
+			dstVerts1 = [
+				j1 * 10,
+				j2 * 10,
+				i1 * 10,
+				i2 * 10
+			],
+			dstVerts2 = [
+				[dstVerts1[0],0,dstVerts1[2]],
+				[dstVerts1[0],0,dstVerts1[3]],
+				[dstVerts1[1],0,dstVerts1[3]],
+				[dstVerts1[1],0,dstVerts1[2]]
+			];
+			for(var k = 0; k < 4; ++k) {
+				dstVerts2[k][3] = 1;
+				dstVerts2[k] = $M([dstVerts2[k]]);
+				dstVerts2[k] = dstVerts2[k].x(viewMatrix);
+				dstVerts2[k] = dstVerts2[k].x(projMatrix);
+				dstVerts2[k] = dstVerts2[k].elements[0];
+			}
+		
+			if(dstVerts2[0][2] <= 1
+			&& dstVerts2[1][2] <= 1
+			&& dstVerts2[2][2] <= 1
+			&& dstVerts2[3][2] <= 1)
+				continue;
+			
+			ground.push([
+				[
+					[srcVerts1[0],srcVerts1[2]],
+					[srcVerts1[0],srcVerts1[3]],
+					[srcVerts1[1],srcVerts1[3]],
+					[srcVerts1[1],srcVerts1[2]]
+				],
+				dstVerts2,
+				1
+			]);
+		}
+	}
+	
+	var ceilingTbl = performanceMode ? [
+		-8,
+		0,
+		8
+	] : [
+		-8,
+		-3,
+		0,
+		3,
+		8
+	];
+	var ceiling = [];
+	for(var i = 0; i < ceilingTbl.length; ++i) {
+		var i1 = ceilingTbl[i],
+			i2 = ceilingTbl[i + 1];
+		
+		for(var j = 0; j < ceilingTbl.length; ++j) {
+			var j1 = ceilingTbl[j],
+				j2 = ceilingTbl[j + 1];
+			
+			var pre = [
+				tex2Size[0] / 2,
+				tex2Size[1] / 2,
+				tex2Size[0] / 16,
+				tex2Size[1] / 16
+			],
+			srcVerts1 = [
+				pre[0] + j1 * pre[2],
+				pre[0] + j2 * pre[2],
+				pre[1] - i1 * pre[3],
+				pre[1] - i2 * pre[3],
+			],
+			dstVerts1 = [
+				j1 * 10,
+				j2 * 10,
+				i1 * 10,
+				i2 * 10
+			],
+			dstVerts2 = [
+				[dstVerts1[1],80,dstVerts1[2]],
+				[dstVerts1[1],80,dstVerts1[3]],
+				[dstVerts1[0],80,dstVerts1[3]],
+				[dstVerts1[0],80,dstVerts1[2]]
+			];
+			for(var k = 0; k < 4; ++k) {
+				dstVerts2[k][3] = 1;
+				dstVerts2[k] = $M([dstVerts2[k]]);
+				dstVerts2[k] = dstVerts2[k].x(viewMatrix);
+				dstVerts2[k] = dstVerts2[k].x(projMatrix);
+				dstVerts2[k] = dstVerts2[k].elements[0];
+			}
+		
+			if(dstVerts2[0][2] <= 1
+			&& dstVerts2[1][2] <= 1
+			&& dstVerts2[2][2] <= 1
+			&& dstVerts2[3][2] <= 1)
+				continue;
+			
+			ground.push([
+				[
+					[srcVerts1[1],srcVerts1[2]],
+					[srcVerts1[1],srcVerts1[3]],
+					[srcVerts1[0],srcVerts1[3]],
+					[srcVerts1[0],srcVerts1[2]]
+				],
+				dstVerts2,
+				2
+			]);
+		}
+	}
+	
+	var walls4 = [];
+	for(var i = 0; i < walls3.length; i += (performanceMode ? 2 : 1)) {
+		var dstVerts1 = [
+			[walls3[i][0][0],0,walls3[i][0][1]],
+			[walls3[i][0][0],80,walls3[i][0][1]],
+			[walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][0],80,walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][1]],
+			[walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][0],0,walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][1]],
+		],
+		dstVec = [
+			$V(dstVerts1[0]),
+			$V(dstVerts1[3]),
+			$V(dstVerts1[1]).subtract($V(dstVerts1[0])).x(1/3),
+			$V(dstVerts1[2]).subtract($V(dstVerts1[3])).x(1/3)
+		],
+		dstVerts2 = [
+			[
+				dstVec[2].x(0).add(dstVec[0]).elements,
+				dstVec[2].x(1).add(dstVec[0]).elements,
+				dstVec[3].x(1).add(dstVec[1]).elements,
+				dstVec[3].x(0).add(dstVec[1]).elements
+			],
+			[
+				dstVec[2].x(1).add(dstVec[0]).elements,
+				dstVec[2].x(3).add(dstVec[0]).elements,
+				dstVec[3].x(3).add(dstVec[1]).elements,
+				dstVec[3].x(1).add(dstVec[1]).elements
+			]
+		];
+
+		var right = walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][1] * tex1Size[0] / 32;
+		if(!right)
+			right = tex1Size[0];
+		var srcCoords = [
+			walls3[i][1] * tex1Size[0] / 32,
+			right,
+			tex1Size[1],
+			tex1Size[1] * 2 / 3,
+			0
+		];
+		
+		for(var j = 0; j < 2; ++j) {
+			for(var k = 0; k < 4; ++k) {
+				dstVerts2[j][k][3] = 1;
+				dstVerts2[j][k] = $M([dstVerts2[j][k]]);
+				dstVerts2[j][k] = dstVerts2[j][k].x(viewMatrix);
+				dstVerts2[j][k] = dstVerts2[j][k].x(projMatrix);
+				dstVerts2[j][k] = dstVerts2[j][k].elements[0];
+			}
+		
+			if(dstVerts2[j][0][2] <= 1
+			&& dstVerts2[j][1][2] <= 1
+			&& dstVerts2[j][2][2] <= 1
+			&& dstVerts2[j][3][2] <= 1)
+				continue;
+		
+			walls4.push([
+				[
+					[srcCoords[0], j ? srcCoords[3] : srcCoords[2]],
+					[srcCoords[0], j ? srcCoords[4] : srcCoords[3]],
+					[srcCoords[1], j ? srcCoords[4] : srcCoords[3]],
+					[srcCoords[1], j ? srcCoords[3] : srcCoords[2]]
+				],
+				dstVerts2[j],
+				0
+			]);
+		}
+	}
+
+	walls4 = walls4.sort(function(a,b){
+		za = (a[1][0][3] + a[1][1][3] + a[1][2][3] + a[1][3][3]) / 4;
+		zb = (b[1][0][3] + b[1][1][3] + b[1][2][3] + b[1][3][3]) / 4;
+		return zb - za;
+	});
+	
+	var quads = ground.concat(ceiling).concat(walls4);
+	for(var i = 0; i < quads.length; ++i) {
+		for(var j = 0; j < 4; ++j) {
+			quads[i][1][j] = [
+				quads[i][1][j][0],
+				quads[i][1][j][1],
+				quads[i][1][j][2]
+			];
+		}
+	}
+	for(var i = 0; i < quads.length; ++i) {
+		var srcMiddle1 = [
+				(quads[i][0][0][0] + quads[i][0][1][0] + quads[i][0][2][0] + quads[i][0][3][0]) / 4,
+				(quads[i][0][0][1] + quads[i][0][1][1] + quads[i][0][2][1] + quads[i][0][3][1]) / 4
+			],
+			dstMiddle1 = [
+				(quads[i][1][0][0] + quads[i][1][1][0] + quads[i][1][2][0] + quads[i][1][3][0]) / 4,
+				(quads[i][1][0][1] + quads[i][1][1][1] + quads[i][1][2][1] + quads[i][1][3][1]) / 4,
+				(quads[i][1][0][2] + quads[i][1][1][2] + quads[i][1][2][2] + quads[i][1][3][2]) / 4
+			],
+			srcVerts1 = [],
+			dstVerts1 = [];
+		srcVerts1.push([quads[i][0][0], quads[i][0][1], srcMiddle1]);
+		srcVerts1.push([quads[i][0][1], quads[i][0][2], srcMiddle1]);
+		srcVerts1.push([quads[i][0][2], quads[i][0][3], srcMiddle1]);
+		srcVerts1.push([quads[i][0][3], quads[i][0][0], srcMiddle1]);
+		dstVerts1.push([quads[i][1][0], quads[i][1][1], dstMiddle1]);
+		dstVerts1.push([quads[i][1][1], quads[i][1][2], dstMiddle1]);
+		dstVerts1.push([quads[i][1][2], quads[i][1][3], dstMiddle1]);
+		dstVerts1.push([quads[i][1][3], quads[i][1][0], dstMiddle1]);
+
+		var srcVerts2 = [],
+			dstVerts2 = [];
+		for(var j = 0; j < dstVerts1.length; ++j) {
+			if(!performanceMode
+			&&(dstVerts1[j][0][2] <= 15
+			|| dstVerts1[j][1][2] <= 15
+			|| dstVerts1[j][2][2] <= 15)) {
+				var srcMiddle2 = [
+						$V(srcVerts1[j][0]).add($V(srcVerts1[j][1])).x(.5),
+						$V(srcVerts1[j][1]).add($V(srcVerts1[j][2])).x(.5),
+						$V(srcVerts1[j][2]).add($V(srcVerts1[j][0])).x(.5)
+					],
+					dstMiddle2 = [
+						$V(dstVerts1[j][0]).add($V(dstVerts1[j][1])).x(.5),
+						$V(dstVerts1[j][1]).add($V(dstVerts1[j][2])).x(.5),
+						$V(dstVerts1[j][2]).add($V(dstVerts1[j][0])).x(.5)
+					];
+				srcVerts2.push([
+					srcMiddle2[0].elements,
+					srcMiddle2[2].elements,
+					srcVerts1[j][0]
+				]);
+				srcVerts2.push([
+					srcMiddle2[1].elements,
+					srcMiddle2[0].elements,
+					srcVerts1[j][1]
+				]);
+				srcVerts2.push([
+					srcMiddle2[2].elements,
+					srcMiddle2[1].elements,
+					srcVerts1[j][2]
+				]);
+				srcVerts2.push([
+					srcMiddle2[0].elements,
+					srcMiddle2[1].elements,
+					srcMiddle2[2].elements
+				]);
+				dstVerts2.push([
+					dstMiddle2[0].elements,
+					dstMiddle2[2].elements,
+					dstVerts1[j][0]
+				]);
+				dstVerts2.push([
+					dstMiddle2[1].elements,
+					dstMiddle2[0].elements,
+					dstVerts1[j][1]
+				]);
+				dstVerts2.push([
+					dstMiddle2[2].elements,
+					dstMiddle2[1].elements,
+					dstVerts1[j][2]
+				]);
+				dstVerts2.push([
+					dstMiddle2[0].elements,
+					dstMiddle2[1].elements,
+					dstMiddle2[2].elements
+				]);
+			}
+			else {
+				srcVerts2.push(srcVerts1[j]);
+				dstVerts2.push(dstVerts1[j]);
+			}
+		}
+		
+		var srcVerts3 = [],
+			dstVerts3 = [];
+		for(var j = 0; j < dstVerts2.length; ++j) {
+			if(dstVerts2[j][0][2] <= 1
+			&& dstVerts2[j][1][2] <= 1
+			&& dstVerts2[j][2][2] <= 1)
+				continue;
+			
+			if(dstVerts2[j][0][2] <= 1
+			|| dstVerts2[j][1][2] <= 1
+			|| dstVerts2[j][2][2] <= 1) {
+				var mode,
+					srcClip1,
+					dstClip1;
+				if(dstVerts2[j][0][2] <= 1
+				&& dstVerts2[j][1][2] <= 1) {
+					mode = 0;
+					srcClip1 = [srcVerts2[j][0], srcVerts2[j][1], srcVerts2[j][2]];
+					dstClip1 = [dstVerts2[j][0], dstVerts2[j][1], dstVerts2[j][2]];
+				}
+				else if(dstVerts2[j][1][2] <= 1
+				&& dstVerts2[j][2][2] <= 1) {
+					mode = 0;
+					srcClip1 = [srcVerts2[j][1], srcVerts2[j][2], srcVerts2[j][0]];
+					dstClip1 = [dstVerts2[j][1], dstVerts2[j][2], dstVerts2[j][0]];
+				}
+				else if(dstVerts2[j][2][2] <= 1
+				&& dstVerts2[j][0][2] <= 1) {
+					mode = 0;
+					srcClip1 = [srcVerts2[j][2], srcVerts2[j][0], srcVerts2[j][1]];
+					dstClip1 = [dstVerts2[j][2], dstVerts2[j][0], dstVerts2[j][1]];
+				}
+				else if(dstVerts2[j][0][2] <= 1) {
+					mode = 1;
+					srcClip1 = [srcVerts2[j][1], srcVerts2[j][2], srcVerts2[j][0]];
+					dstClip1 = [dstVerts2[j][1], dstVerts2[j][2], dstVerts2[j][0]];
+				}
+				else if(dstVerts2[j][1][2] <= 1) {
+					mode = 1;
+					srcClip1 = [srcVerts2[j][2], srcVerts2[j][0], srcVerts2[j][1]];
+					dstClip1 = [dstVerts2[j][2], dstVerts2[j][0], dstVerts2[j][1]];
+				}
+				else if(dstVerts2[j][2][2] <= 1) {
+					mode = 1;
+					srcClip1 = [srcVerts2[j][0], srcVerts2[j][1], srcVerts2[j][2]];
+					dstClip1 = [dstVerts2[j][0], dstVerts2[j][1], dstVerts2[j][2]];
+				}
+				
+				try {
+					var srcVec = [
+						$V(srcClip1[0]).subtract($V(srcClip1[2])),
+						$V(srcClip1[1]).subtract($V(srcClip1[2])),
+						$V(srcClip1[2])
+					],
+					dstVec = [
+						Plane.XY.translate(Vector.k).intersectionWith($L($V(dstClip1[2]),$V(dstClip1[0]).subtract($V(dstClip1[2])))),
+						Plane.XY.translate(Vector.k).intersectionWith($L($V(dstClip1[2]),$V(dstClip1[1]).subtract($V(dstClip1[2]))))
+					],
+					dstClip2 = [
+						dstVec[0].elements,
+						dstVec[1].elements,
+						dstClip1[2]
+					],
+					dist = [
+						Math.min($V(dstClip2[0]).distanceFrom($V(dstClip2[2])) / $V(dstClip1[0]).distanceFrom($V(dstClip1[2])),1),
+						Math.min($V(dstClip2[1]).distanceFrom($V(dstClip2[2])) / $V(dstClip1[1]).distanceFrom($V(dstClip1[2])),1)
+					],
+					srcClip2 = [
+						srcVec[0].x(dist[0]).add(srcVec[2]).elements,
+						srcVec[1].x(dist[1]).add(srcVec[2]).elements,
+						srcClip1[2]
+					];
+					if(!mode) {
+						srcVerts3.push(srcClip2);
+						dstVerts3.push(dstClip2);
+					}
+					else {
+						var srcMiddle3 = [
+								(srcClip2[0][0] + srcClip2[1][0]) / 2,
+								(srcClip2[0][1] + srcClip2[1][1]) / 2
+							],
+							dstMiddle3 = [
+								(dstClip2[0][0] + dstClip2[1][0]) / 2,
+								(dstClip2[0][1] + dstClip2[1][1]) / 2,
+								(dstClip2[0][2] + dstClip2[1][2]) / 2
+							];
+						srcVerts3.push([
+							srcClip2[0],
+							srcClip1[0],
+							srcMiddle3
+						]);
+						srcVerts3.push([
+							srcClip1[1],
+							srcClip2[1],
+							srcMiddle3
+						]);
+						srcVerts3.push([
+							srcClip1[0],
+							srcClip1[1],
+							srcMiddle3
+						]);
+						dstVerts3.push([
+							dstClip2[0],
+							dstClip1[0],
+							dstMiddle3
+						]);
+						dstVerts3.push([
+							dstClip1[1],
+							dstClip2[1],
+							dstMiddle3
+						]);
+						dstVerts3.push([
+							dstClip1[0],
+							dstClip1[1],
+							dstMiddle3
+						]);
+					}
+				}
+				catch(e) { }
+			}
+			else {
+				srcVerts3.push(srcVerts2[j]);
+				dstVerts3.push(dstVerts2[j]);
+			}
+		}
+
+		for(var j = 0; j < dstVerts3.length; ++j) {
+			var dstCoords = [];
+			for(var k = 0; k < 3; ++k) {
+				var depth = Math.max(dstVerts3[j][k][2], 1);
+				dstCoords[k] = [
+					outSize[0]/2+dstVerts3[j][k][0]/depth*outSize[0]/2,
+					outSize[1]/2-dstVerts3[j][k][1]/depth*outSize[1]/2
+				];
+			}
+		
+			if(dstCoords[0][0] <= 0
+			&& dstCoords[1][0] <= 0
+			&& dstCoords[2][0] <= 0)
+				continue;
+		
+			if(dstCoords[0][0] > outSize[0]
+			&& dstCoords[1][0] > outSize[0]
+			&& dstCoords[2][0] > outSize[0])
+				continue;
+		
+			if(dstCoords[0][1] <= 0
+			&& dstCoords[1][1] <= 0
+			&& dstCoords[2][1] <= 0)
+				continue;
+		
+			if(dstCoords[0][1] > outSize[1]
+			&& dstCoords[1][1] > outSize[1]
+			&& dstCoords[2][1] > outSize[1])
+				continue;
+		
+			var normal = $V([dstCoords[2][0]-dstCoords[0][0],dstCoords[2][1]-dstCoords[0][1],0]).cross($V([dstCoords[1][0]-dstCoords[0][0],dstCoords[1][1]-dstCoords[0][1],0]));
+			if(normal.elements[2] > 0)
+				continue;
+			
+			transformTriangle(texImg2[quads[i][2]], srcVerts3[j], buf, dstCoords, true);
+		}
+	}
+
+	for(var i = 0; i < links3.length; ++i) {
+		var vec = $V(links3[i][1]);
+		var dist = vec.distanceFrom(Vector.Zero(2));
+		vec = vec.x(70/dist);
+		
+		var linkVert = vec.elements;
+		linkVert = $M([[linkVert[0],0,linkVert[1],1]]);
+		linkVert = linkVert.x(viewMatrix);
+		linkVert = linkVert.x(projMatrix);
+		linkVert = linkVert.elements[0];
+		
+		if(linkVert[2] <= 1
+		&& linkVert[2] <= 1
+		&& linkVert[2] <= 1
+		&& linkVert[2] <= 1)
+			continue;
+		
+		var depth = Math.max(linkVert[2], 1);
+		var linkCoords = outSize[0]/2+linkVert[0]/depth*outSize[0]/2;
+
+		var linkSize = outSize[1] / 32;
+		
+		buf.save();
+		buf.translate(linkCoords,outSize[1] - linkSize*2);
+		
+		buf.fillStyle = 'rgba(0, 255, 0, 0.5';
+		buf.beginPath();
+		buf.moveTo(0,-linkSize*2);
+		buf.lineTo(linkSize,0);
+		buf.lineTo(-linkSize,0);
+		buf.closePath();
+		buf.fill();
+		
+		buf.restore();
+	}
+	
+	out.drawImage(bufImg,0,0);
+
+	if(fade) {
+		$('#outImg').finish();
+		$('#outImg').fadeTo(0,.5);
+		$('#outImg').fadeTo(500,1);
+		fade = false;
+	}
+	
+	isUpdating = false;
+	if(requiresUpdate)
+		setTimeout(update, 1);
+}
+
+function move(x,z) {
+	var vec = $V([x,z]).rotate(-viewRot[1], [0,0]);
+	
+	viewPos[0] += vec.elements[0];
+	viewPos[1] += vec.elements[1];
+	
+	setTimeout(load, 1);
+}
+
+var pressed = {},
+	pressedOnce = {},
+	pressedTimer = false;
+function handlePressed() {
+	var isPressed = false;
+	for(var key in pressed) {
+		if(pressed[key])
+			pressedOnce[key] = true;
+	}
+	for(var key in pressedOnce) {
+		if(pressedOnce[key]) {
+			isPressed = true;
+			switch(parseInt(key)) {
+			case 87: // w
+				move(0,1);
+			break;
+			case 65: // a
+				move(-1,0);
+			break;
+			case 83: // s
+				move(0,-1);
+			break;
+			case 68: // d
+				move(1,0);
+			break;
+			case 37: // left
+				viewRot[1] -= Math.PI*2/32;
+			break;
+			case 38: // up
+				viewRot[0] -= Math.PI/2/8;
+			break;
+			case 39: // right
+				viewRot[1] += Math.PI*2/32;
+			break;
+			case 40: // down
+				viewRot[0] += Math.PI/2/8;
+			break;
+			}
+		}
+	}
+	pressedOnce = [];
+	if(isPressed){
+		setTimeout(update, 1);
+		setTimeout(handlePressed, 100);
+	}
+	else {
+		pressedTimer = false;
+	}
+}
+
+keydownHandler = function(key) {
+	switch(key) {
+	case 87: // w
+	case 65: // a
+	case 83: // s
+	case 68: // d
+	case 37: // left
+	case 38: // up
+	case 39: // right
+	case 40: // down
+		pressed[key] = true;
+		pressedOnce[key] = true;
+		if(!pressedTimer) {
+			pressedTimer = true;
+			setTimeout(handlePressed, 1);
+		}
+	}
+}
+$(window).keydown(function(e) {
+	keydownHandler(e.which);
+});
+
+keyupHandler = function(key) {
+	switch(key) {
+	case 87: // w
+	case 65: // a
+	case 83: // s
+	case 68: // d
+	case 37: // left
+	case 38: // up
+	case 39: // right
+	case 40: // down
+		pressed[key] = false;
+	}
+}
+$(window).keyup(function(e) {
+	keyupHandler(e.which);
+});
+
+$(window).resize(function() {
+	setTimeout(update, 1);
+});
+
+$(window).error(function() {
+	if(!abortOnFail) {
+		$('#fail_gen').show();
+		$('#outImg').hide();
+	}
+});
+
+setTimeout(load, 1);
+
+});
+</script>
+</body>
+</html>
