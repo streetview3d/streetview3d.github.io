@@ -1,5 +1,4 @@
 ```html
-
 <h1>Street View 3D</h1>
 
 <p><i>Navigate smoothly through Google Street View in a reconstructed 3D scene.</i></p>
@@ -29,5 +28,4 @@ The quality of the composed image is a tradeoff between rendering correctness an
 <li>Microsoft Internet Explorer 11 on Windows 7 & Windows 8.1</li>
 <li>Mozilla Firefox 29.0.1 on Windows 7, Windows 8.1 & Ubuntu 12.04</li>
 </ul>
-
 ```
