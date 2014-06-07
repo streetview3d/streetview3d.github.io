@@ -447,7 +447,7 @@ function load() {
 							var x = yaw * width / 32,
 								y = height / 2 - (pitch - 2) * height / 32,
 								index = depthMap1[offset + y * width + x],
-								depth = 160;
+								depth = 100;
 							if(index > 0) {
 								var phi = (width - x - 1) / (width - 1) * 2 * (Math.PI) + (Math.PI/2),
 									theta = (height - y - 1) / (height - 1) * (Math.PI),
@@ -463,13 +463,13 @@ function load() {
 								v[2] *= t;
 								depth = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
 								depth = Math.max(depth, 10);
-								depth = Math.min(depth, 160);
+								depth = Math.min(depth, 100);
 							}
 							depthMap3[pitch] = depth;
 						}
 			
 						depthMap4[yaw] = (depthMap3[2]*4 + depthMap3[3]*2 + depthMap3[4]) / 7;
-						depthMap4[yaw] = Math.min(depthMap4[yaw], 100);
+						depthMap4[yaw] = Math.min(depthMap4[yaw], 70);
 					}
 					
 					var depthMap5 = [];
@@ -546,16 +546,16 @@ function load() {
 
 							var dist2 = link[3].distanceFrom(Vector.Zero(2));
 							
-							console.log('$', dist2, data.Links.length);
+							//console.log('$', dist2, data.Links.length);
 							
-							if(dist2 < 120 && data.Links.length == 2) {
+							if(dist2 < 80 && data.Links.length == 2) {
 								for(var i = 0; i < data.Links.length; ++i) {
 									var heading2 = parseFloat(data.Links[i].yawDeg);
 
-									console.log(data.Links[i].panoId, link[2], heading2, Math.abs(link[2] - heading2));
+									//console.log(data.Links[i].panoId, link[2], heading2, Math.abs(link[2] - heading2));
 									
 									if(Math.abs(link[2] - heading2) < 45
-									|| Math.abs(link[2] - heading2) > (360 - 45)) {console.log('->');
+									|| Math.abs(link[2] - heading2) > (360 - 45)) {//console.log('->');
 										link = [
 											data.Links[i].panoId,
 											new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng),
@@ -569,8 +569,8 @@ function load() {
 							}
 							
 							{
-								if(dist2 > 120)
-									link[3] = link[3].x(120/dist2);
+								if(dist2 > 80)
+									link[3] = link[3].x(80/dist2);
 								if(dist2 < 20)
 									link[3] = link[3].x(dist2/20);
 								
@@ -614,7 +614,7 @@ function load() {
 				for(var yaw = 0; yaw < yaws; ++yaw) {
 					var pre = [
 						panoImg.width / yaws,
-						1 / (1 << 3) * 120 / (ceiling ? 77.5 : 2.75),
+						1 / (1 << 3) * 80 / (ceiling ? 77.5 : 2.75),
 						1 / (Math.PI/2) * panoImg.height / 2,
 						1 / yaws * (Math.PI*2),
 						Math.cos(1 / yaws * (Math.PI*2)),
@@ -829,8 +829,8 @@ function update() {
 	
 	var vec = $V(viewPos),
 		dist = vec.distanceFrom(Vector.Zero(2));
-	if(dist > 100) {
-		vec = vec.x(100/dist);
+	if(dist > 70) {
+		vec = vec.x(70/dist);
 		viewPos = vec.elements;
 	}
 	
@@ -908,10 +908,10 @@ function update() {
 				pre[1] - i2 * pre[3],
 			],
 			dstVerts1 = [
-				j1 * 15,
-				j2 * 15,
-				i1 * 15,
-				i2 * 15
+				j1 * 10,
+				j2 * 10,
+				i1 * 10,
+				i2 * 10
 			],
 			dstVerts2 = [
 				[dstVerts1[0],0,dstVerts1[2]],
@@ -981,10 +981,10 @@ function update() {
 				pre[1] - i2 * pre[3],
 			],
 			dstVerts1 = [
-				j1 * 15,
-				j2 * 15,
-				i1 * 15,
-				i2 * 15
+				j1 * 10,
+				j2 * 10,
+				i1 * 10,
+				i2 * 10
 			],
 			dstVerts2 = [
 				[dstVerts1[1],80,dstVerts1[2]],
@@ -1498,9 +1498,9 @@ function handlePressed() {
 	if(isPressed){
 		if(!isLoading)
 			skipCtr = 0;
-		if(!(skipCtr++ % 5))
+		if(!(skipCtr++ % 2))
 			setTimeout(update, 1);
-		setTimeout(handlePressed, 100);
+		setTimeout(handlePressed, isLoading ? 250 : 100);
 	}
 	else {
 		pressedTimer = false;
