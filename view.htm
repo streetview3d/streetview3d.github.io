@@ -67,11 +67,6 @@ function radialCoord(center, angle, radius) {
 // coordinates are extrapolated to remove gaps between polygons
 
 function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
-	var middle = [
-		(dstCoords[0][0] + dstCoords[1][0] + dstCoords[2][0]) / 3,
-		(dstCoords[0][1] + dstCoords[1][1] + dstCoords[2][1]) / 3
-	];
-	
 	dstCtx.save();
 
 	var vec1 = [
@@ -79,6 +74,7 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 			$V(dstCoords[1]),
 			$V(dstCoords[2])
 		],
+		middle = vec1[0].add(vec1[1]).add(vec1[2]).x(1/3).elements,
 		vec2 = [
 			vec1[1].subtract(vec1[0]),
 			vec1[2].subtract(vec1[1]),
@@ -162,14 +158,8 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 // same, but segment quad first
 
 function transformQuad(srcCtx, srcCoords, dstCtx, dstCoords, center) {
-	var srcMiddle = [
-			(srcCoords[0][0] + srcCoords[1][0] + srcCoords[2][0] + srcCoords[3][0]) / 4,
-			(srcCoords[0][1] + srcCoords[1][1] + srcCoords[2][1] + srcCoords[3][1]) / 4
-		],
-		dstMiddle = [
-			(dstCoords[0][0] + dstCoords[1][0] + dstCoords[2][0] + dstCoords[3][0]) / 4,
-			(dstCoords[0][1] + dstCoords[1][1] + dstCoords[2][1] + dstCoords[3][1]) / 4
-		];
+	var srcMiddle = $V(srcCoords[0]).add($V(srcCoords[1])).add($V(srcCoords[2])).add($V(srcCoords[3])).x(1/4).elements,
+		dstMiddle = $V(dstCoords[0]).add($V(dstCoords[1])).add($V(dstCoords[2])).add($V(dstCoords[3])).x(1/4).elements;
 	transformTriangle(srcCtx, [srcCoords[0], srcCoords[1], srcMiddle], dstCtx, [dstCoords[0], dstCoords[1], dstMiddle], false);
 	transformTriangle(srcCtx, [srcCoords[1], srcCoords[2], srcMiddle], dstCtx, [dstCoords[1], dstCoords[2], dstMiddle], false);
 	transformTriangle(srcCtx, [srcCoords[2], srcCoords[3], srcMiddle], dstCtx, [dstCoords[2], dstCoords[3], dstMiddle], false);
@@ -257,28 +247,27 @@ function load() {
 	isLoading = true;
 	
 	// check link proximity and direction
-
-	// TODO check direction
 	
 	var linkPos = [0,0],
 		previousCenterHeading = centerHeading,
-		nearestLink = null,
-		nearestDist = Number.POSITIVE_INFINITY;
+		nearestAngle = (Math.PI/2);
 	for(var i = 0; i < links3.length; ++i) {
 		var posLinkDist = $V(loadPos).distanceFrom($V(links3[i][1])),
-			posCenterDist = $V(loadPos).distanceFrom(Vector.Zero(2));
+			posCenterDist = $V(loadPos).distanceFrom(Vector.Zero(2)),
+			moveAngle = $V(loadPos).subtract($V(viewPos)).angleFrom($V(links3[i][1]));
 		if(posLinkDist < posCenterDist
-		&& nearestDist > posLinkDist) {
-			nearestLink = links3[i];
-			nearestDist = posLinkDist;
+		&& moveAngle < (Math.PI*3/8)
+		&& nearestAngle > moveAngle) {
+			nearestAngle = moveAngle;
 			panoId = links3[i][0];
 			linkPos = links3[i][1];
 		}
 
+		//console.log(moveAngle / (Math.PI/180));
 		//console.log(posLinkDist, JSON.stringify(links3[i][1]), links3[i][2] / (Math.PI/180));
 	}
 	
-	if(panoId != null && nearestLink == null) {
+	if(panoId != null && nearestAngle == (Math.PI/2)) {
 		isLoading = false;
 		return;
 	}
@@ -742,7 +731,7 @@ function load() {
 
 		function() {
 			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180),
-				vec = $V(viewPos).subtract(linkPos).rotate(-rotDiff, [0,0]);
+				vec = $V(viewPos).subtract($V(linkPos)).rotate(-rotDiff, [0,0]);
 			viewPos = vec.elements; // TODO
 			viewRot[1] += rotDiff;
 			
@@ -1110,15 +1099,8 @@ function update() {
 		}
 	}
 	for(var i = 0; i < quads.length; ++i) {
-		var srcMiddle1 = [
-				(quads[i][0][0][0] + quads[i][0][1][0] + quads[i][0][2][0] + quads[i][0][3][0]) / 4,
-				(quads[i][0][0][1] + quads[i][0][1][1] + quads[i][0][2][1] + quads[i][0][3][1]) / 4
-			],
-			dstMiddle1 = [
-				(quads[i][1][0][0] + quads[i][1][1][0] + quads[i][1][2][0] + quads[i][1][3][0]) / 4,
-				(quads[i][1][0][1] + quads[i][1][1][1] + quads[i][1][2][1] + quads[i][1][3][1]) / 4,
-				(quads[i][1][0][2] + quads[i][1][1][2] + quads[i][1][2][2] + quads[i][1][3][2]) / 4
-			],
+		var srcMiddle1 = $V(quads[i][0][0]).add($V(quads[i][0][1])).add($V(quads[i][0][2])).add($V(quads[i][0][3])).x(1/4).elements,
+			dstMiddle1 = $V(quads[i][1][0]).add($V(quads[i][1][1])).add($V(quads[i][1][2])).add($V(quads[i][1][3])).x(1/4).elements,
 			srcVerts1 = [],
 			dstVerts1 = [];
 		srcVerts1.push([quads[i][0][0], quads[i][0][1], srcMiddle1]);
@@ -1273,15 +1255,8 @@ function update() {
 						dstVerts3.push(dstClip2);
 					}
 					else {
-						var srcMiddle3 = [
-								(srcClip2[0][0] + srcClip2[1][0]) / 2,
-								(srcClip2[0][1] + srcClip2[1][1]) / 2
-							],
-							dstMiddle3 = [
-								(dstClip2[0][0] + dstClip2[1][0]) / 2,
-								(dstClip2[0][1] + dstClip2[1][1]) / 2,
-								(dstClip2[0][2] + dstClip2[1][2]) / 2
-							];
+						var srcMiddle3 = $V(srcClip2[0]).add($V(srcClip2[1])).x(1/2).elements,
+							dstMiddle3 = $V(dstClip2[0]).add($V(dstClip2[1])).x(1/2).elements;
 						srcVerts3.push([
 							srcClip2[0],
 							srcClip1[0],
@@ -1367,8 +1342,7 @@ function update() {
 	// draw compass to buffer
 
 	for(var i = 0; i < links3.length; ++i) {
-		var vec = $V(links3[i][1]),
-			heading = ((Math.PI*4) + (Math.PI*3/8) + links3[i][2] - viewRot[1]) % (Math.PI*2),
+		var heading = ((Math.PI*4) + (Math.PI*3/8) + links3[i][2] - viewRot[1]) % (Math.PI*2),
 			linkCoords,
 			linkSize;
 		
@@ -1429,17 +1403,11 @@ function update() {
 var isMoving = false;
 function move(x,z) {
 	isMoving = true;
-	var vec = $V([x*2,z*2]).rotate(-viewRot[1], [0,0]);
-	
-	viewPos[0] += vec.elements[0];
-	viewPos[1] += vec.elements[1];
+	var vec = $V([x,z]).x(isLoading ? 1 : 2).rotate(-viewRot[1], [0,0]);
 
-	loadPos = [viewPos[0],viewPos[1]];
-	loadPos[0] += vec.elements[0]*loadDist;
-	loadPos[1] += vec.elements[1]*loadDist;
-
-	loadDistPos[0] += vec.elements[0];
-	loadDistPos[1] += vec.elements[1];
+	viewPos = $V(viewPos).add(vec).elements;
+	loadPos = $V(viewPos).add(vec.x(loadDist)).elements;
+	loadDistPos = $V(loadDistPos).add(vec).elements;
 	
 	setTimeout(load, 1);
 }
@@ -1492,15 +1460,15 @@ function handlePressed() {
 	}
 	loadDist = $V(loadDistPos).distanceFrom(Vector.Zero(2)) / 2;
 	loadDist = Math.max(loadDist,1);
-	loadDist = Math.min(loadDist,30);
+	loadDist = Math.min(loadDist,40);
 	
 	pressedOnce = [];
 	if(isPressed){
 		if(!isLoading)
 			skipCtr = 0;
-		if(!(skipCtr++ % 2))
+		if(!(skipCtr++ % 5))
 			setTimeout(update, 1);
-		setTimeout(handlePressed, isLoading ? 250 : 100);
+		setTimeout(handlePressed, 100);
 	}
 	else {
 		pressedTimer = false;
