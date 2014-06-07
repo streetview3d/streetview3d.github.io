@@ -184,11 +184,11 @@ function Bytes2Float32(bytes) {
 		exponent = ((bytes >> 23) & 0xFF) - 127,
 		significand = (bytes & ~(-1 << 23));
 
-	if (exponent == 128) 
+	if(exponent == 128) 
 		return sign * ((significand) ? Number.NaN : Number.POSITIVE_INFINITY);
 
-	if (exponent == -127) {
-		if (significand == 0) return sign * 0.0;
+	if(exponent == -127) {
+		if(significand == 0) return sign * 0.0;
 		exponent = -126;
 		significand /= (1 << 22);
 	} else significand = (significand | (1 << 23)) / (1 << 23);
@@ -207,7 +207,9 @@ function getParam(param) {
 // global state
 
 var viewPos = [.07,.03],
-	loadPos = viewPos;
+	loadPos = viewPos,
+	loadDistPos = [0,0],
+	loadDist = 1,
 	viewRot = [0,-(Math.PI/2)],
 	latLng = null,
 	panoId = null,
@@ -223,8 +225,17 @@ if(getParam('turn') == '1') // TODO n,e,s,w
 var zoomLevel = 3,
 	panoSize = [416 << zoomLevel,(416 << zoomLevel) >> 1],
 	tileSize = [512, 512],
-	tex1Size = [panoSize[0],panoSize[1] >> 1],
+	tex1Size = [panoSize[0],panoSize[1]],
 	tex2Size = [panoSize[0] >> 1,panoSize[0] >> 1];
+
+// global coeffs
+
+var coeff = {
+	groundRadius: 100,
+	wallRadius: 100,
+	wallHeigth: 80,
+	cameraHeight: 2.75
+};
 
 // loaded resources
 
@@ -245,13 +256,14 @@ function load() {
 		return;
 	isLoading = true;
 	
-	// check link proximity
+	// check link proximity and direction
+
+	// TODO check direction
 	
-	var linkPos = [0,0];
-	var previousCenterHeading = centerHeading;
-	
-	var nearestLink = null;
-	var nearestDist = Number.POSITIVE_INFINITY;
+	var linkPos = [0,0],
+		previousCenterHeading = centerHeading,
+		nearestLink = null,
+		nearestDist = Number.POSITIVE_INFINITY;
 	for(var i = 0; i < links3.length; ++i) {
 		var posLinkDist = $V(loadPos).distanceFrom($V(links3[i][1])),
 			posCenterDist = $V(loadPos).distanceFrom(Vector.Zero(2));
@@ -262,6 +274,8 @@ function load() {
 			panoId = links3[i][0];
 			linkPos = links3[i][1];
 		}
+
+		//console.log(posLinkDist, JSON.stringify(links3[i][1]), links3[i][2] / (Math.PI/180));
 	}
 	
 	if(panoId != null && nearestLink == null) {
@@ -357,13 +371,6 @@ function load() {
 				try {
 					panoId = data.location.pano;
 					centerHeading = data.tiles.centerHeading;
-					
-					for(var i = 0; i < data.links.length; ++i) {
-						links1[i] = [
-							data.links[i].pano,
-							data.links[i].heading
-						];
-					}
 				}
 				catch(e) {
 					$('#fail_data').show();
@@ -403,6 +410,15 @@ function load() {
 				success: function(data) {
 					latLng = new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng);
 					
+					for(var i = 0; i < data.Links.length; ++i) {
+						links1[i] = [
+							data.Links[i].panoId,
+							latLng,
+							parseFloat(data.Links[i].yawDeg),
+							Vector.Zero(2)
+						];
+					}
+					
 					var depthMap1 = data.model.depth_map;
 		
 					depthMap1 = depthMap1.replace(/-/g,'+');
@@ -410,10 +426,10 @@ function load() {
 					depthMap1 = atob(depthMap1);
 					depthMap1 = pako.inflate(depthMap1);
 		
-					var planeCount = (depthMap1[2] << 8) | depthMap1[1];
-					var width = (depthMap1[4] << 8) | depthMap1[3];
-					var height = (depthMap1[6] << 8) | depthMap1[5];
-					var offset = (depthMap1[8] << 8) | depthMap1[7];
+					var planeCount = (depthMap1[2] << 8) | depthMap1[1],
+						width = (depthMap1[4] << 8) | depthMap1[3],
+						height = (depthMap1[6] << 8) | depthMap1[5],
+						offset = (depthMap1[8] << 8) | depthMap1[7];
 		
 					var depthMap2 = [];
 					for(var i = 0; i < planeCount; ++i) {
@@ -425,39 +441,51 @@ function load() {
 					}
 		
 					var depthMap4 = [];
-					for(var yaw = 0; yaw <= 32; ++yaw) {
+					for(var yaw = 0; yaw < 32; ++yaw) {
 						var depthMap3 = [];
 						for(var pitch = 2; pitch <= 4; ++pitch) {
 							var x = yaw * width / 32,
 								y = height / 2 - (pitch - 2) * height / 32,
-								index = depthMap1[offset + y * width + x];
-							var depth = 100;
+								index = depthMap1[offset + y * width + x],
+								depth = 160;
 							if(index > 0) {
-								var phi = (width - x - 1) / (width - 1) * 2 * (Math.PI) + (Math.PI/2);
-								var theta = (height - y - 1) / (height - 1) * (Math.PI);
-								var v = [
-									Math.sin(theta) * Math.cos(phi),
-									Math.sin(theta) * Math.sin(phi),
-									Math.cos(theta)
-								];
-					
-								var plane = depthMap2[index];
-								var t = plane[3] / (v[0]*plane[0] + v[1]*plane[1] + v[2]*plane[2]);
+								var phi = (width - x - 1) / (width - 1) * 2 * (Math.PI) + (Math.PI/2),
+									theta = (height - y - 1) / (height - 1) * (Math.PI),
+									v = [
+										Math.sin(theta) * Math.cos(phi),
+										Math.sin(theta) * Math.sin(phi),
+										Math.cos(theta)
+									],
+									plane = depthMap2[index],
+									t = plane[3] / (v[0]*plane[0] + v[1]*plane[1] + v[2]*plane[2]);
 								v[0] *= t;
 								v[1] *= t;
 								v[2] *= t;
 								depth = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
-								depth = Math.max(depth, 4);
-								depth = Math.min(depth, 100);
+								depth = Math.max(depth, 10);
+								depth = Math.min(depth, 160);
 							}
 							depthMap3[pitch] = depth;
 						}
 			
 						depthMap4[yaw] = (depthMap3[2]*4 + depthMap3[3]*2 + depthMap3[4]) / 7;
-						depthMap4[yaw] = Math.min(depthMap4[yaw], 70);
+						depthMap4[yaw] = Math.min(depthMap4[yaw], 100);
 					}
-		
-					walls1 = depthMap4;
+					
+					var depthMap5 = [];
+					for(var yaw = 0; yaw < 32; ++yaw) {
+						var middle = (depthMap4[(yaw + 32 - 1) % 32] + depthMap4[(yaw + 1) % 32]) / 2,
+							amount = Math.abs(depthMap4[yaw] - middle);
+						if(amount >= 20
+						&& Math.abs(depthMap4[(yaw + 32 - 1) % 32] - depthMap4[(yaw + 1) % 32]) <= amount / 2) {
+							depthMap5[yaw] = middle;
+						}
+						else {
+							depthMap5[yaw] = depthMap4[yaw];
+						}
+					}
+					
+					walls1 = depthMap5;
 		
 					next();
 				}
@@ -497,18 +525,12 @@ function load() {
 
 		// load links
 
-		function() { // TODO
+		function() {
 			var nextCtr = 1;
-			
-			function nextLink1(link) {
-			}
-			
-			function nextLink2(link) {
-			}
 			
 			for(var i = 0; i < links1.length; ++i) {
 				nextCtr++;
-				(function(link) {
+				function nextLink(link) {
 					$.ajax({
 						url: 'https://maps.google.com/cbk?output=json&dm=1&pm=1&ph=1&panoid='+link[0],
 						dataType: 'jsonp',
@@ -516,34 +538,67 @@ function load() {
 							throw null;
 						},
 						success: function(data) {
-							var dist = Math.min(google.maps.geometry.spherical.computeDistanceBetween(latLng, new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)), 80);
-							var heading = (link[1] - centerHeading) * (Math.PI/180) - (Math.PI/2)
-							var vec = $V([0,dist]).rotate(-heading, [0,0]);
-						
-							links2.push([
-								link[0],
-								vec.elements,
-								heading
-							]);
+							var dist1 = google.maps.geometry.spherical.computeDistanceBetween(link[1], new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)),
+								heading1 = ((link[2] - centerHeading) * (Math.PI/180) + (Math.PI*3/2)) % (Math.PI*2),
+								vec = $V([0,dist1]).rotate(-heading1, [0,0]);
+
+							link[3] = link[3].add(vec);
+
+							var dist2 = link[3].distanceFrom(Vector.Zero(2));
 							
-							if(!--nextCtr)
-								next();
+							console.log('$', dist2, data.Links.length);
+							
+							if(dist2 < 120 && data.Links.length == 2) {
+								for(var i = 0; i < data.Links.length; ++i) {
+									var heading2 = parseFloat(data.Links[i].yawDeg);
+
+									console.log(data.Links[i].panoId, link[2], heading2, Math.abs(link[2] - heading2));
+									
+									if(Math.abs(link[2] - heading2) < 45
+									|| Math.abs(link[2] - heading2) > (360 - 45)) {console.log('->');
+										link = [
+											data.Links[i].panoId,
+											new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng),
+											heading2,
+											link[3]
+										];
+										nextLink(link);
+										return;
+									}
+								}
+							}
+							
+							{
+								if(dist2 > 120)
+									link[3] = link[3].x(120/dist2);
+								if(dist2 < 20)
+									link[3] = link[3].x(dist2/20);
+								
+								links2.push([
+									link[0],
+									link[3].elements,
+									((Math.PI*4) + Math.atan2(link[3].elements[1], link[3].elements[0]) - (Math.PI/2)) % (Math.PI*2)
+								]);
+							
+								if(!--nextCtr)
+									next();
+							}
 						}
 					});
-				})(links1[i]);
+				}
+				nextLink(links1[i]);
 			}
 
 			if(!--nextCtr)
 				next();
 		},
 
-		// prepare ground and ceiling textures
+		// prepare ground, ceiling and wall textures
 
 		function() {
-			var nextCtr = 1;
-
-			var callList1 = [];
-			var callList2 = [];
+			var nextCtr = 1,
+				callList1 = [],
+				callList2 = [];
 
 			function async1() {
 				if(callList1.length == 0)
@@ -559,7 +614,7 @@ function load() {
 				for(var yaw = 0; yaw < yaws; ++yaw) {
 					var pre = [
 						panoImg.width / yaws,
-						1 / (1 << 3) * 80 / (ceiling ? 77.5 : 2.75),
+						1 / (1 << 3) * 120 / (ceiling ? 77.5 : 2.75),
 						1 / (Math.PI/2) * panoImg.height / 2,
 						1 / yaws * (Math.PI*2),
 						Math.cos(1 / yaws * (Math.PI*2)),
@@ -686,24 +741,18 @@ function load() {
 		// finish loading and initiate update
 
 		function() {
-			//var reload = false;
-			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180);
-			var vec = $V(viewPos).subtract(linkPos).rotate(-rotDiff, [0,0]);
-			/*var dist = vec.distanceFrom(Vector.Zero(2));
-			if(dist > 40) {
-				vec = vec.x(40/dist);
-				reload = true;
-			}*/
-			viewPos = vec.elements;
+			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180),
+				vec = $V(viewPos).subtract(linkPos).rotate(-rotDiff, [0,0]);
+			viewPos = vec.elements; // TODO
 			viewRot[1] += rotDiff;
 			
-			var walls2 = [];
-			var mergeNext = false;
+			var walls2 = [],
+				mergeNext = false;
 			for(var i = 0; i < 32; ++i) {
 				if(mergeNext
 				&& i >= 1 && i < 31
-				&& walls1[i - 1] <= 30 && walls1[i] <= 30 && walls1[i + 1] <= 30
-				&& Math.abs(walls1[i - 1] - walls1[i + 1]) <= 3) {
+				&& walls1[i - 1] <= 40 && walls1[i] <= 40 && walls1[i + 1] <= 40
+				&& Math.abs(walls1[i - 1] - walls1[i + 1]) <= 5) {
 					mergeNext = false;
 					continue;
 				}
@@ -719,13 +768,11 @@ function load() {
 			texImg2 = texImg1;
 			links3 = links2;
 			walls3 = walls2;
+			
+			isLoading = false;
 
 			fade = true;
 			setTimeout(update, 1);
-			
-			isLoading = false;
-			//if(reload)
-			//	setTimeout(load, 1);
 		}
 	];
 	
@@ -780,10 +827,10 @@ function update() {
 
 	// view translation and projection matrices
 	
-	var vec = $V(viewPos);
-	var dist = vec.distanceFrom(Vector.Zero(2));
-	if(dist > 70) {
-		vec = vec.x(70/dist);
+	var vec = $V(viewPos),
+		dist = vec.distanceFrom(Vector.Zero(2));
+	if(dist > 100) {
+		vec = vec.x(100/dist);
 		viewPos = vec.elements;
 	}
 	
@@ -861,10 +908,10 @@ function update() {
 				pre[1] - i2 * pre[3],
 			],
 			dstVerts1 = [
-				j1 * 10,
-				j2 * 10,
-				i1 * 10,
-				i2 * 10
+				j1 * 15,
+				j2 * 15,
+				i1 * 15,
+				i2 * 15
 			],
 			dstVerts2 = [
 				[dstVerts1[0],0,dstVerts1[2]],
@@ -934,10 +981,10 @@ function update() {
 				pre[1] - i2 * pre[3],
 			],
 			dstVerts1 = [
-				j1 * 10,
-				j2 * 10,
-				i1 * 10,
-				i2 * 10
+				j1 * 15,
+				j2 * 15,
+				i1 * 15,
+				i2 * 15
 			],
 			dstVerts2 = [
 				[dstVerts1[1],80,dstVerts1[2]],
@@ -1087,9 +1134,9 @@ function update() {
 			dstVerts2 = [];
 		for(var j = 0; j < dstVerts1.length; ++j) {
 			if(!performanceMode
-			&&(dstVerts1[j][0][2] <= 15
-			|| dstVerts1[j][1][2] <= 15
-			|| dstVerts1[j][2][2] <= 15)) {
+			&&(dstVerts1[j][0][2] <= 20
+			|| dstVerts1[j][1][2] <= 20
+			|| dstVerts1[j][2][2] <= 20)) {
 				var srcMiddle2 = [
 						$V(srcVerts1[j][0]).add($V(srcVerts1[j][1])).x(.5),
 						$V(srcVerts1[j][1]).add($V(srcVerts1[j][2])).x(.5),
@@ -1345,21 +1392,16 @@ function update() {
 		buf.save();
 		buf.translate(linkCoords[0],linkCoords[1]);
 		
-		buf.fillStyle = '#000';
+		buf.fillStyle = '#0f0';
+		buf.strokeStyle = '#000';
+		buf.lineWidth = 1;
 		buf.beginPath();
 		buf.moveTo(0,(-linkSize*2)*linkCoords[2]);
 		buf.lineTo(linkSize,0);
 		buf.lineTo(-linkSize,0);
 		buf.closePath();
 		buf.fill();
-		
-		buf.fillStyle = '#0f0';
-		buf.beginPath();
-		buf.moveTo(0,(-linkSize*2+1.5)*linkCoords[2]);
-		buf.lineTo((linkSize-1.5),-1*linkCoords[2]);
-		buf.lineTo(-(linkSize-1.5),-1*linkCoords[2]);
-		buf.closePath();
-		buf.fill();
+		buf.stroke();
 		
 		buf.restore();
 	}
@@ -1368,12 +1410,12 @@ function update() {
 	
 	out.drawImage(bufImg,0,0);
 
-	/*if(fade) {
+	if(fade) {
 		$('#outImg').finish();
 		$('#outImg').fadeTo(0,.5);
 		$('#outImg').fadeTo(500,1);
 		fade = false;
-	}*/
+	}
 
 	// repeat after concurrent event
 	
@@ -1384,23 +1426,30 @@ function update() {
 
 // key and event handlers
 
+var isMoving = false;
 function move(x,z) {
+	isMoving = true;
 	var vec = $V([x*2,z*2]).rotate(-viewRot[1], [0,0]);
 	
 	viewPos[0] += vec.elements[0];
 	viewPos[1] += vec.elements[1];
 
 	loadPos = [viewPos[0],viewPos[1]];
-	loadPos[0] += vec.elements[0]*20;
-	loadPos[1] += vec.elements[1]*20;
+	loadPos[0] += vec.elements[0]*loadDist;
+	loadPos[1] += vec.elements[1]*loadDist;
+
+	loadDistPos[0] += vec.elements[0];
+	loadDistPos[1] += vec.elements[1];
 	
 	setTimeout(load, 1);
 }
 
 var pressed = {},
 	pressedOnce = {},
-	pressedTimer = false;
+	pressedTimer = false,
+	skipCtr = 0;
 function handlePressed() {
+	isMoving = false;
 	var isPressed = false;
 	for(var key in pressed) {
 		if(pressed[key])
@@ -1437,9 +1486,20 @@ function handlePressed() {
 			}
 		}
 	}
+	
+	if(!isMoving) {
+		loadDistPos = [0,0];
+	}
+	loadDist = $V(loadDistPos).distanceFrom(Vector.Zero(2)) / 2;
+	loadDist = Math.max(loadDist,1);
+	loadDist = Math.min(loadDist,30);
+	
 	pressedOnce = [];
 	if(isPressed){
-		setTimeout(update, 1);
+		if(!isLoading)
+			skipCtr = 0;
+		if(!(skipCtr++ % 5))
+			setTimeout(update, 1);
 		setTimeout(handlePressed, 100);
 	}
 	else {
