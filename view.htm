@@ -5,12 +5,12 @@
 <script type="text/javascript" src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDtlKIl02bk1ebAl4zYhC3gx5l5BkzxSSQ&sensor=false"></script>
 <script type="text/javascript" src="jquery-1.11.1.min.js"></script>
 <script type="text/javascript" src="pako_inflate.min.js"></script>
-<script type="text/javascript" src="sylvester.js"></script> 
+<script type="text/javascript" src="sylvester.js"></script>
 </head>
 <body style="background-color:#000;">
 
 <table style="width:100%; height:100%; color:#fff; font-family: sans-serif; font-size: smaller;">
-<tr><td style="text-align:center; font-weight:bold;">Move: W A S D, Look: Cursor keys&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if($('#ctrlCont').is(':visible')) {$('#ctrlCont').hide(); $(this).text('Show buttons');} else {$('#ctrlCont').show(); $(this).text('Hide buttons');} $(window).resize();">Show buttons</a></td></tr>
+<tr><td style="text-align:center; font-weight:bold;">Move: W A S D, Look: Cursor keys&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if($('#ctrlCont').is(':visible')) {$('#ctrlCont').hide(); $(this).text('Show buttons');} else {$('#ctrlCont').show(); $(this).text('Hide buttons');} setTimeout(update, 1);">Show buttons</a>&nbsp;&nbsp;&nbsp;<a href="javascript:void(0)" style="color:#ccf;" onclick="if(qualityMode) {qualityMode = false; $(this).text('HQ OFF');} else {qualityMode = true; $(this).text('HQ ON');} forceLoad = true; setTimeout(load, 1);">HQ OFF</a></td></tr>
 <tr><td id="outCont" style="text-align:center; height:100%;">
 <div id="fail_js">You have to enable Javascript in your browser!</div>
 <div id="fail_data" style="display:none;">Sorry, no Street View data found for this address!</div>
@@ -44,9 +44,12 @@ Look:
 
 // global accessible functions and initialization
 
-var keydownHandler = function() {},
+var load = function() {},
+	update = function() {},
+	keydownHandler = function() {},
 	keyupHandler = function() {},
-	performanceMode = false;
+	qualityMode = false,
+	forceLoad = false;
 $(function() {
 
 var abortOnFail = false;
@@ -68,7 +71,7 @@ function radialCoord(center, angle, radius) {
 
 function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 	dstCtx.save();
-
+	
 	var vec1 = [
 			$V(dstCoords[0]),
 			$V(dstCoords[1]),
@@ -142,7 +145,7 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 	}
 	
 	dstCtx.restore();
-
+	
 	/*if(wireframe) {
 		dstCtx.strokeStyle = '#fff';
 		dstCtx.lineWidth = 1;
@@ -157,7 +160,19 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 
 // same, but segment quad first
 
-function transformQuad(srcCtx, srcCoords, dstCtx, dstCoords, center) {
+function transformQuad1(srcCtx, srcCoords, dstCtx, dstCoords, center) {
+	if(qualityMode) {
+		var quads = qualitySegment([[srcCoords,dstCoords,null]]);
+		for(var i = 0; i < 4; ++i) {
+			transformQuad2(srcCtx, quads[i][0], dstCtx, quads[i][1], (center && i < 2));
+		}
+	}
+	else {
+		transformQuad2(srcCtx, srcCoords, dstCtx, dstCoords, center);
+	}
+}
+
+function transformQuad2(srcCtx, srcCoords, dstCtx, dstCoords, center) {
 	var srcMiddle = $V(srcCoords[0]).add($V(srcCoords[1])).add($V(srcCoords[2])).add($V(srcCoords[3])).x(1/4).elements,
 		dstMiddle = $V(dstCoords[0]).add($V(dstCoords[1])).add($V(dstCoords[2])).add($V(dstCoords[3])).x(1/4).elements;
 	transformTriangle(srcCtx, [srcCoords[0], srcCoords[1], srcMiddle], dstCtx, [dstCoords[0], dstCoords[1], dstMiddle], false);
@@ -167,22 +182,101 @@ function transformQuad(srcCtx, srcCoords, dstCtx, dstCoords, center) {
 		transformTriangle(srcCtx, [srcCoords[3], srcCoords[0], srcMiddle], dstCtx, [dstCoords[3], dstCoords[0], dstMiddle], false);
 }
 
+// segment quads for quality mode
+
+function qualitySegment(quads1) { // TODO
+	var quads2 = [];
+	
+	for(var i = 0; i < quads1.length; ++i) {
+		var srcVec = [
+				$V(quads1[i][0][0]),
+				$V(quads1[i][0][1]),
+				$V(quads1[i][0][2]),
+				$V(quads1[i][0][3])
+			],
+			srcPoint = [
+				[
+					srcVec[0].elements,
+					srcVec[0].add(srcVec[3]).x(1/2).elements,
+					srcVec[3].elements,
+				],
+				[
+					srcVec[0].add(srcVec[1]).x(1/2).elements,
+					null,
+					srcVec[3].add(srcVec[2]).x(1/2).elements
+				],
+				[
+					srcVec[1].elements,
+					srcVec[1].add(srcVec[2]).x(1/2).elements,
+					srcVec[2].elements,
+				]
+			],
+			dstVec = [
+				$V(quads1[i][1][0]),
+				$V(quads1[i][1][1]),
+				$V(quads1[i][1][2]),
+				$V(quads1[i][1][3])
+			],
+			dstPoint = [
+				[
+					dstVec[0].elements,
+					dstVec[0].add(dstVec[3]).x(1/2).elements,
+					dstVec[3].elements,
+				],
+				[
+					dstVec[0].add(dstVec[1]).x(1/2).elements,
+					null,
+					dstVec[3].add(dstVec[2]).x(1/2).elements
+				],
+				[
+					dstVec[1].elements,
+					dstVec[1].add(dstVec[2]).x(1/2).elements,
+					dstVec[2].elements,
+				]
+			];
+			srcPoint[1][1] = $V(srcPoint[1][0]).add($V(srcPoint[1][2])).x(1/2).elements;
+			dstPoint[1][1] = $V(dstPoint[1][0]).add($V(dstPoint[1][2])).x(1/2).elements;
+		quads2.push([
+			[srcPoint[0][0], srcPoint[1][0], srcPoint[1][1], srcPoint[0][1]],
+			[dstPoint[0][0], dstPoint[1][0], dstPoint[1][1], dstPoint[0][1]],
+			quads1[i][2]
+		]);
+		quads2.push([
+			[srcPoint[0][1], srcPoint[1][1], srcPoint[1][2], srcPoint[0][2]],
+			[dstPoint[0][1], dstPoint[1][1], dstPoint[1][2], dstPoint[0][2]],
+			quads1[i][2]
+		]);
+		quads2.push([
+			[srcPoint[1][0], srcPoint[2][0], srcPoint[2][1], srcPoint[1][1]],
+			[dstPoint[1][0], dstPoint[2][0], dstPoint[2][1], dstPoint[1][1]],
+			quads1[i][2]
+		]);
+		quads2.push([
+			[srcPoint[1][1], srcPoint[2][1], srcPoint[2][2], srcPoint[1][2]],
+			[dstPoint[1][1], dstPoint[2][1], dstPoint[2][2], dstPoint[1][2]],
+			quads1[i][2]
+		]);
+	}
+
+	return quads2;
+}
+
 // floating point number decoder
 
 function Bytes2Float32(bytes) {
 	var sign = (bytes & 0x80000000) ? -1 : 1,
 		exponent = ((bytes >> 23) & 0xFF) - 127,
 		significand = (bytes & ~(-1 << 23));
-
-	if(exponent == 128) 
+	
+	if(exponent == 128)
 		return sign * ((significand) ? Number.NaN : Number.POSITIVE_INFINITY);
-
+	
 	if(exponent == -127) {
 		if(significand == 0) return sign * 0.0;
 		exponent = -126;
 		significand /= (1 << 22);
 	} else significand = (significand | (1 << 23)) / (1 << 23);
-
+	
 	return sign * significand * Math.pow(2, exponent);
 }
 
@@ -215,12 +309,12 @@ if(getParam('turn') == '1') // TODO n,e,s,w
 var zoomLevel = 3,
 	panoSize = [416 << zoomLevel,(416 << zoomLevel) >> 1],
 	tileSize = [512, 512],
-	tex1Size = [panoSize[0],panoSize[1]],
+	tex1Size = [panoSize[0],panoSize[1] >> 1],
 	tex2Size = [panoSize[0] >> 1,panoSize[0] >> 1];
 
 // global coeffs
 
-var coeff = {
+var coeff = { // TODO
 	groundRadius: 100,
 	wallRadius: 100,
 	wallHeigth: 80,
@@ -238,7 +332,7 @@ var texImg2 = null,
 
 var isLoading = false;
 
-function load() {
+load = function() {
 
 	// handle concurrent event
 	
@@ -262,15 +356,16 @@ function load() {
 			panoId = links3[i][0];
 			linkPos = links3[i][1];
 		}
-
+		
 		//console.log(moveAngle / (Math.PI/180));
 		//console.log(posLinkDist, JSON.stringify(links3[i][1]), links3[i][2] / (Math.PI/180));
 	}
 	
-	if(panoId != null && nearestAngle == (Math.PI/2)) {
+	if(!forceLoad && panoId != null && nearestAngle == (Math.PI/2)) {
 		isLoading = false;
 		return;
 	}
+	forceLoad = false;
 	
 	// declare temporary buffers
 	
@@ -323,7 +418,7 @@ function load() {
 				if(!keyValid)
 					$('#fail_key').show();
 			}, 4000);
-
+			
 			if(panoId != null) {
 				next();
 			}
@@ -343,20 +438,20 @@ function load() {
 							abortOnFail = true;
 							throw e;
 						}
-		
+						
 						next();
 					}
 				);
 			}
 		},
-
+		
 		// load panorama details
-
+		
 		function() {
 			var success = function(data) {
 				keyValid = true;
 				$('#fail_key').hide();
-	
+				
 				try {
 					panoId = data.location.pano;
 					centerHeading = data.tiles.centerHeading;
@@ -368,7 +463,7 @@ function load() {
 					abortOnFail = true;
 					throw e;
 				}
-	
+				
 				next();
 			}
 			
@@ -386,9 +481,9 @@ function load() {
 				);
 			}
 		},
-
+		
 		// load depth map
-
+		
 		function() {
 			$.ajax({
 				url: 'https://maps.google.com/cbk?output=json&dm=1&pm=1&ph=1&panoid='+panoId,
@@ -409,17 +504,17 @@ function load() {
 					}
 					
 					var depthMap1 = data.model.depth_map;
-		
+					
 					depthMap1 = depthMap1.replace(/-/g,'+');
 					depthMap1 = depthMap1.replace(/_/g,'/');
 					depthMap1 = atob(depthMap1);
 					depthMap1 = pako.inflate(depthMap1);
-		
+					
 					var planeCount = (depthMap1[2] << 8) | depthMap1[1],
 						width = (depthMap1[4] << 8) | depthMap1[3],
 						height = (depthMap1[6] << 8) | depthMap1[5],
 						offset = (depthMap1[8] << 8) | depthMap1[7];
-		
+					
 					var depthMap2 = [];
 					for(var i = 0; i < planeCount; ++i) {
 						depthMap2[i] = [];
@@ -428,7 +523,7 @@ function load() {
 							depthMap2[i][j] = Bytes2Float32((depthMap1[pos+3] << 24) | (depthMap1[pos+2] << 16) | (depthMap1[pos+1] << 8) | depthMap1[pos]);
 						}
 					}
-		
+					
 					var depthMap4 = [];
 					for(var yaw = 0; yaw < 32; ++yaw) {
 						var depthMap3 = [];
@@ -456,7 +551,7 @@ function load() {
 							}
 							depthMap3[pitch] = depth;
 						}
-			
+						
 						depthMap4[yaw] = (depthMap3[2]*4 + depthMap3[3]*2 + depthMap3[4]) / 7;
 						depthMap4[yaw] = Math.min(depthMap4[yaw], 70);
 					}
@@ -475,19 +570,19 @@ function load() {
 					}
 					
 					walls1 = depthMap5;
-		
+					
 					next();
 				}
 			});
 		},
-
+		
 		// load panorama bitmap
-
+		
 		function() {
 			panoImg = document.createElement('canvas');
 			panoImg.width = panoSize[0];
 			panoImg.height = panoSize[1];
-
+			
 			var nextCtr = 1;
 			for(var y1 = 0, y2 = 0; y2 < panoSize[1]; ++y1, y2 += tileSize[1]) {
 				for(var x1 = 0, x2 = 0; x2 < panoSize[0]; ++x1, x2 += tileSize[0]) {
@@ -496,7 +591,7 @@ function load() {
 						var tileImg = new Image();
 						tileImg.onload = function() {
 							panoImg.getContext('2d').drawImage(tileImg,x2,y2);
-				
+							
 							if(!--nextCtr)
 								next();
 						}
@@ -507,13 +602,13 @@ function load() {
 					})(x1,x2,y1,y2);
 				}
 			}
-
+			
 			if(!--nextCtr)
 				next();
 		},
-
+		
 		// load links
-
+		
 		function() {
 			var nextCtr = 1;
 			
@@ -530,9 +625,9 @@ function load() {
 							var dist1 = google.maps.geometry.spherical.computeDistanceBetween(link[1], new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)),
 								heading1 = ((link[2] - centerHeading) * (Math.PI/180) + (Math.PI*3/2)) % (Math.PI*2),
 								vec = $V([0,dist1]).rotate(-heading1, [0,0]);
-
+							
 							link[3] = link[3].add(vec);
-
+							
 							var dist2 = link[3].distanceFrom(Vector.Zero(2));
 							
 							//console.log('$', dist2, data.Links.length);
@@ -540,7 +635,7 @@ function load() {
 							if(dist2 < 80 && data.Links.length == 2) {
 								for(var i = 0; i < data.Links.length; ++i) {
 									var heading2 = parseFloat(data.Links[i].yawDeg);
-
+									
 									//console.log(data.Links[i].panoId, link[2], heading2, Math.abs(link[2] - heading2));
 									
 									if(Math.abs(link[2] - heading2) < 45
@@ -568,7 +663,7 @@ function load() {
 									link[3].elements,
 									((Math.PI*4) + Math.atan2(link[3].elements[1], link[3].elements[0]) - (Math.PI/2)) % (Math.PI*2)
 								]);
-							
+								
 								if(!--nextCtr)
 									next();
 							}
@@ -577,18 +672,18 @@ function load() {
 				}
 				nextLink(links1[i]);
 			}
-
+			
 			if(!--nextCtr)
 				next();
 		},
-
+		
 		// prepare ground, ceiling and wall textures
-
+		
 		function() {
 			var nextCtr = 1,
 				callList1 = [],
 				callList2 = [];
-
+			
 			function async1() {
 				if(callList1.length == 0)
 					return;
@@ -642,11 +737,11 @@ function load() {
 						radialCoord(pre[6], dstCoords1[1], dstCoords1[3]),
 						radialCoord(pre[6], dstCoords1[1], dstCoords2[1])
 					];
-					transformQuad(panoImg, srcCoords3, ceiling ? tex1[2] : tex1[1], dstCoords3, !pitch);
+					transformQuad1(panoImg, srcCoords3, ceiling ? tex1[2] : tex1[1], dstCoords3, !pitch);
 				}
 				
 				setTimeout(async1, 1);
-			
+				
 				if(!--nextCtr)
 					next();
 			}
@@ -706,7 +801,7 @@ function load() {
 						[dstCoords1[1], dstCoords1[3]],
 						[dstCoords1[1], dstCoords1[2]]
 					];
-					transformQuad(panoImg, srcCoords3, tex1[0], dstCoords2, false);
+					transformQuad1(panoImg, srcCoords3, tex1[0], dstCoords2, false);
 				}
 				
 				setTimeout(async2, 1);
@@ -722,13 +817,13 @@ function load() {
 			
 			setTimeout(async1, 1);
 			setTimeout(async2, 1);
-
+			
 			if(!--nextCtr)
 				next();
 		},
-
+		
 		// finish loading and initiate update
-
+		
 		function() {
 			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180),
 				vec = $V(viewPos).subtract($V(linkPos)).rotate(-rotDiff, [0,0]);
@@ -745,7 +840,7 @@ function load() {
 					mergeNext = false;
 					continue;
 				}
-	
+				
 				walls2.push([
 					radialCoord([0,0], -(i / 32 * (Math.PI*2)), walls1[i]),
 					i
@@ -759,7 +854,7 @@ function load() {
 			walls3 = walls2;
 			
 			isLoading = false;
-
+			
 			fade = true;
 			setTimeout(update, 1);
 		}
@@ -776,10 +871,10 @@ var isUpdating = false,
 	requiresUpdate = false,
 	fade = false;
 
-function update() {
+update = function() {
 	if(tex2 == null || texImg2 == null || walls3 == null)
 		return;
-
+	
 	// handle concurrent event
 	
 	requiresUpdate = true;
@@ -787,7 +882,7 @@ function update() {
 		return;
 	isUpdating = true;
 	requiresUpdate = false;
-
+	
 	// update dimensions, set canvas properties and clear buffer
 	
 	var btnSize = $("body").width()/20;
@@ -813,7 +908,7 @@ function update() {
 	
 	buf.fillStyle = '#000';
 	buf.fillRect(0, 0, outSize[0], outSize[1]);
-
+	
 	// view translation and projection matrices
 	
 	var vec = $V(viewPos),
@@ -861,12 +956,7 @@ function update() {
 	
 	// build ground, translate and rotate
 	
-	var groundTbl = performanceMode ? [
-		-8,
-		-2,
-		2,
-		8
-	] : [
+	var groundTbl = [
 		-8,
 		-3,
 		-1,
@@ -915,7 +1005,7 @@ function update() {
 				dstVerts2[k] = dstVerts2[k].x(projMatrix);
 				dstVerts2[k] = dstVerts2[k].elements[0];
 			}
-		
+			
 			if(dstVerts2[0][2] <= 1
 			&& dstVerts2[1][2] <= 1
 			&& dstVerts2[2][2] <= 1
@@ -937,11 +1027,7 @@ function update() {
 	
 	// build ceiling, translate and rotate
 	
-	var ceilingTbl = performanceMode ? [
-		-8,
-		0,
-		8
-	] : [
+	var ceilingTbl = [
 		-8,
 		-3,
 		0,
@@ -988,7 +1074,7 @@ function update() {
 				dstVerts2[k] = dstVerts2[k].x(projMatrix);
 				dstVerts2[k] = dstVerts2[k].elements[0];
 			}
-		
+			
 			if(dstVerts2[0][2] <= 1
 			&& dstVerts2[1][2] <= 1
 			&& dstVerts2[2][2] <= 1
@@ -1011,12 +1097,12 @@ function update() {
 	// build walls, translate and rotate
 	
 	var walls4 = [];
-	for(var i = 0; i < walls3.length; i += (performanceMode ? 2 : 1)) {
+	for(var i = 0; i < walls3.length; ++i) {
 		var dstVerts1 = [
 			[walls3[i][0][0],0,walls3[i][0][1]],
 			[walls3[i][0][0],80,walls3[i][0][1]],
-			[walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][0],80,walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][1]],
-			[walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][0],0,walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][0][1]],
+			[walls3[(i + 1) % walls3.length][0][0],80,walls3[(i + 1) % walls3.length][0][1]],
+			[walls3[(i + 1) % walls3.length][0][0],0,walls3[(i + 1) % walls3.length][0][1]],
 		],
 		dstVec = [
 			$V(dstVerts1[0]),
@@ -1038,8 +1124,8 @@ function update() {
 				dstVec[3].x(1).add(dstVec[1]).elements
 			]
 		];
-
-		var right = walls3[(i + (performanceMode ? 2 : 1)) % walls3.length][1] * tex1Size[0] / 32;
+		
+		var right = walls3[(i + 1) % walls3.length][1] * tex1Size[0] / 32;
 		if(!right)
 			right = tex1Size[0];
 		var srcCoords = [
@@ -1058,13 +1144,13 @@ function update() {
 				dstVerts2[j][k] = dstVerts2[j][k].x(projMatrix);
 				dstVerts2[j][k] = dstVerts2[j][k].elements[0];
 			}
-		
+			
 			if(dstVerts2[j][0][2] <= 1
 			&& dstVerts2[j][1][2] <= 1
 			&& dstVerts2[j][2][2] <= 1
 			&& dstVerts2[j][3][2] <= 1)
 				continue;
-		
+			
 			walls4.push([
 				[
 					[srcCoords[0], j ? srcCoords[3] : srcCoords[2]],
@@ -1077,16 +1163,16 @@ function update() {
 			]);
 		}
 	}
-
+	
 	// z-sort walls
-
+	
 	walls4 = walls4.sort(function(a,b){
 		za = (a[1][0][3] + a[1][1][3] + a[1][2][3] + a[1][3][3]) / 4;
 		zb = (b[1][0][3] + b[1][1][3] + b[1][2][3] + b[1][3][3]) / 4;
 		return zb - za;
 	});
-
-	// merge ground, ceiling and wall quads, split to triangles and optionally segment
+	
+	// merge ground, ceiling and wall quads, split to triangles and segment
 	
 	var quads = ground.concat(ceiling).concat(walls4);
 	for(var i = 0; i < quads.length; ++i) {
@@ -1098,6 +1184,8 @@ function update() {
 			];
 		}
 	}
+	if(qualityMode)
+		quads = qualitySegment(quads);
 	for(var i = 0; i < quads.length; ++i) {
 		var srcMiddle1 = $V(quads[i][0][0]).add($V(quads[i][0][1])).add($V(quads[i][0][2])).add($V(quads[i][0][3])).x(1/4).elements,
 			dstMiddle1 = $V(quads[i][1][0]).add($V(quads[i][1][1])).add($V(quads[i][1][2])).add($V(quads[i][1][3])).x(1/4).elements,
@@ -1111,14 +1199,13 @@ function update() {
 		dstVerts1.push([quads[i][1][1], quads[i][1][2], dstMiddle1]);
 		dstVerts1.push([quads[i][1][2], quads[i][1][3], dstMiddle1]);
 		dstVerts1.push([quads[i][1][3], quads[i][1][0], dstMiddle1]);
-
+		
 		var srcVerts2 = [],
 			dstVerts2 = [];
 		for(var j = 0; j < dstVerts1.length; ++j) {
-			if(!performanceMode
-			&&(dstVerts1[j][0][2] <= 20
+			if(dstVerts1[j][0][2] <= 20
 			|| dstVerts1[j][1][2] <= 20
-			|| dstVerts1[j][2][2] <= 20)) {
+			|| dstVerts1[j][2][2] <= 20) {
 				var srcMiddle2 = [
 						$V(srcVerts1[j][0]).add($V(srcVerts1[j][1])).x(.5),
 						$V(srcVerts1[j][1]).add($V(srcVerts1[j][2])).x(.5),
@@ -1175,7 +1262,7 @@ function update() {
 				dstVerts2.push(dstVerts1[j]);
 			}
 		}
-
+		
 		// clip near
 		
 		var srcVerts3 = [],
@@ -1296,11 +1383,11 @@ function update() {
 				dstVerts3.push(dstVerts2[j]);
 			}
 		}
-
+		
 		// convert triangles to viewport coordinates and draw to buffer
 		// assume near clipped
 		// cull viewport and backface
-
+		
 		for(var j = 0; j < dstVerts3.length; ++j) {
 			var dstCoords = [];
 			for(var k = 0; k < 3; ++k) {
@@ -1310,27 +1397,27 @@ function update() {
 					outSize[1]/2-dstVerts3[j][k][1]/depth*outSize[1]/2
 				];
 			}
-		
+			
 			if(dstCoords[0][0] <= 0
 			&& dstCoords[1][0] <= 0
 			&& dstCoords[2][0] <= 0)
 				continue;
-		
+			
 			if(dstCoords[0][0] > outSize[0]
 			&& dstCoords[1][0] > outSize[0]
 			&& dstCoords[2][0] > outSize[0])
 				continue;
-		
+			
 			if(dstCoords[0][1] <= 0
 			&& dstCoords[1][1] <= 0
 			&& dstCoords[2][1] <= 0)
 				continue;
-		
+			
 			if(dstCoords[0][1] > outSize[1]
 			&& dstCoords[1][1] > outSize[1]
 			&& dstCoords[2][1] > outSize[1])
 				continue;
-		
+			
 			var normal = $V([dstCoords[2][0]-dstCoords[0][0],dstCoords[2][1]-dstCoords[0][1],0]).cross($V([dstCoords[1][0]-dstCoords[0][0],dstCoords[1][1]-dstCoords[0][1],0]));
 			if(normal.elements[2] > 0)
 				continue;
@@ -1338,9 +1425,9 @@ function update() {
 			transformTriangle(texImg2[quads[i][2]], srcVerts3[j], buf, dstCoords, true);
 		}
 	}
-
+	
 	// draw compass to buffer
-
+	
 	for(var i = 0; i < links3.length; ++i) {
 		var heading = ((Math.PI*4) + (Math.PI*3/8) + links3[i][2] - viewRot[1]) % (Math.PI*2),
 			linkCoords,
@@ -1379,18 +1466,18 @@ function update() {
 		
 		buf.restore();
 	}
-
+	
 	// swap buffer
 	
 	out.drawImage(bufImg,0,0);
-
+	
 	if(fade) {
 		$('#outImg').finish();
 		$('#outImg').fadeTo(0,.5);
 		$('#outImg').fadeTo(500,1);
 		fade = false;
 	}
-
+	
 	// repeat after concurrent event
 	
 	isUpdating = false;
@@ -1404,7 +1491,7 @@ var isMoving = false;
 function move(x,z) {
 	isMoving = true;
 	var vec = $V([x,z]).x(isLoading ? 1 : 2).rotate(-viewRot[1], [0,0]);
-
+	
 	viewPos = $V(viewPos).add(vec).elements;
 	loadPos = $V(viewPos).add(vec.x(loadDist)).elements;
 	loadDistPos = $V(loadDistPos).add(vec).elements;
