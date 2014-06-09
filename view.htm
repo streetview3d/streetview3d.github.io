@@ -42,6 +42,8 @@ Look:
 
 <script type="text/javascript">
 
+// TODO fail location
+
 // global accessible functions and initialization
 
 var load = function() {},
@@ -66,45 +68,63 @@ function radialCoord(center, angle, radius) {
 	];
 }
 
+// normalize radian to the range from 0 to 2*pi
+
+function normalizeRad(radian) {
+	return ((radian) % (Math.PI*2) + (Math.PI*2)) % (Math.PI*2);
+}
+
+// convert degree to radian
+
+function deg2rad(degree) {
+	return normalizeRad(degree * (Math.PI/180));
+}
+
 // copy triangle from one buffer to another and apply affine transformation
 // coordinates are extrapolated to remove gaps between polygons
 
 function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 	dstCtx.save();
 
-	// TODO extrapolate srcCoords
+	for(var i = 0; i < 2; ++i) {
+		var vec1 = [
+				$V((i ? dstCoords : srcCoords)[0]),
+				$V((i ? dstCoords : srcCoords)[1]),
+				$V((i ? dstCoords : srcCoords)[2])
+			],
+			middle = vec1[0].add(vec1[1]).add(vec1[2]).x(1/3).elements,
+			vec2 = [
+				vec1[1].subtract(vec1[0]),
+				vec1[2].subtract(vec1[1]),
+				vec1[0].subtract(vec1[2])
+			],
+			pre1 = [
+				vec1[1].distanceFrom(vec1[2]),
+				vec1[2].distanceFrom(vec1[0]),
+				vec1[0].distanceFrom(vec1[1]),
+				Math.cos((Math.PI/2) - vec2[0].angleFrom(vec2[2].x(-1)) / 2),
+				Math.cos((Math.PI/2) - vec2[1].angleFrom(vec2[0].x(-1)) / 2),
+				Math.cos((Math.PI/2) - vec2[2].angleFrom(vec2[1].x(-1)) / 2)
+			],
+			center = vec1[0].x(pre1[0]).add(vec1[1].x(pre1[1])).add(vec1[2].x(pre1[2])).x(1 / (pre1[0] + pre1[1] + pre1[2])),
+			pre2 = [
+				vec1[0].subtract(center),
+				vec1[1].subtract(center),
+				vec1[2].subtract(center),
+				vec1[0].distanceFrom(center),
+				vec1[1].distanceFrom(center),
+				vec1[2].distanceFrom(center)
+			];
 	
-	var vec1 = [
-			$V(dstCoords[0]),
-			$V(dstCoords[1]),
-			$V(dstCoords[2])
-		],
-		middle = vec1[0].add(vec1[1]).add(vec1[2]).x(1/3).elements,
-		vec2 = [
-			vec1[1].subtract(vec1[0]),
-			vec1[2].subtract(vec1[1]),
-			vec1[0].subtract(vec1[2])
-		],
-		dstPre1 = [
-			vec1[1].distanceFrom(vec1[2]),
-			vec1[2].distanceFrom(vec1[0]),
-			vec1[0].distanceFrom(vec1[1]),
-			Math.cos((Math.PI/2) - vec2[0].angleFrom(vec2[2].x(-1)) / 2),
-			Math.cos((Math.PI/2) - vec2[1].angleFrom(vec2[0].x(-1)) / 2),
-			Math.cos((Math.PI/2) - vec2[2].angleFrom(vec2[1].x(-1)) / 2)
-		],
-		dstCenter = vec1[0].x(dstPre1[0]).add(vec1[1].x(dstPre1[1])).add(vec1[2].x(dstPre1[2])).x(1 / (dstPre1[0] + dstPre1[1] + dstPre1[2])),
-		dstPre2 = [
-			vec1[0].subtract(dstCenter),
-			vec1[1].subtract(dstCenter),
-			vec1[2].subtract(dstCenter),
-			vec1[0].distanceFrom(dstCenter),
-			vec1[1].distanceFrom(dstCenter),
-			vec1[2].distanceFrom(dstCenter)
-		];
-	
-	for(var i = 0; i < 3; ++i) {
-		dstCoords[i] = dstPre2[i].x((dstPre2[i + 3] + Math.min(.5 / dstPre1[i + 3], 3)) / dstPre2[i + 3]).add(dstCenter).elements;
+		for(var j = 0; j < 3; ++j) {
+			(i ? dstCoords : srcCoords)[j] = pre2[j].x((pre2[j + 3] + Math.min((i ? 1/2 : 1/4) / pre1[j + 3], (i ? 3 : 3))) / pre2[j + 3]).add(center).elements;
+		}
+	}
+	for(var j = 0; j < 3; ++j) {
+		srcCoords[j][0] = Math.max(srcCoords[j][0], 0);
+		srcCoords[j][0] = Math.min(srcCoords[j][0], srcImg.width);
+		srcCoords[j][1] = Math.max(srcCoords[j][1], 0);
+		srcCoords[j][1] = Math.min(srcCoords[j][1], srcImg.height);
 	}
 	
 	dstCtx.beginPath();
@@ -186,7 +206,7 @@ function transformQuad2(srcCtx, srcCoords, dstCtx, dstCoords, center) {
 
 // segment quads for quality mode
 
-function qualitySegment(quads1) { // TODO
+function qualitySegment(quads1) { // TODO central ground
 	var quads2 = [];
 	
 	for(var i = 0; i < quads1.length; ++i) {
@@ -296,7 +316,7 @@ var viewPos = [.07,.03],
 	loadPos = viewPos,
 	loadDistPos = [0,0],
 	loadDist = 1,
-	viewRot = [0,-(Math.PI/2)],
+	viewRot = [0,-deg2rad(90)],
 	latLng = null,
 	panoId = null,
 	centerHeading = null;
@@ -304,7 +324,7 @@ var viewPos = [.07,.03],
 // configure initial heading
 
 if(getParam('turn') == '1') // TODO n,e,s,w
-	viewRot[1] += (Math.PI);
+	viewRot[1] += deg2rad(180);
 
 // constant query parameters
 
@@ -346,24 +366,20 @@ load = function() {
 	
 	var linkPos = [0,0],
 		previousCenterHeading = centerHeading,
-		nearestAngle = (Math.PI/2);
+		nearestAngle = deg2rad(67.5);
 	for(var i = 0; i < links3.length; ++i) {
 		var posLinkDist = $V(loadPos).distanceFrom($V(links3[i][1])),
 			posCenterDist = $V(loadPos).distanceFrom(Vector.Zero(2)),
 			moveAngle = $V(loadPos).subtract($V(viewPos)).angleFrom($V(links3[i][1]));
 		if(posLinkDist < posCenterDist
-		&& moveAngle < (Math.PI*3/8)
 		&& nearestAngle > moveAngle) {
 			nearestAngle = moveAngle;
 			panoId = links3[i][0];
 			linkPos = links3[i][1];
 		}
-		
-		//console.log(moveAngle / (Math.PI/180));
-		//console.log(posLinkDist, JSON.stringify(links3[i][1]), links3[i][2] / (Math.PI/180));
 	}
 	
-	if(!forceLoad && panoId != null && nearestAngle == (Math.PI/2)) {
+	if(!forceLoad && panoId != null && nearestAngle == deg2rad(67.5)) {
 		isLoading = false;
 		return;
 	}
@@ -456,7 +472,7 @@ load = function() {
 				
 				try {
 					panoId = data.location.pano;
-					centerHeading = data.tiles.centerHeading; // TODO radian
+					centerHeading = deg2rad(data.tiles.centerHeading);
 				}
 				catch(e) {
 					$('#fail_data').show();
@@ -500,7 +516,7 @@ load = function() {
 						links1[i] = [
 							data.Links[i].panoId,
 							latLng,
-							parseFloat(data.Links[i].yawDeg),
+							deg2rad(parseFloat(data.Links[i].yawDeg)),
 							Vector.Zero(2)
 						];
 					}
@@ -627,23 +643,19 @@ load = function() {
 						},
 						success: function(data) {
 							var dist1 = google.maps.geometry.spherical.computeDistanceBetween(link[1], new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)),
-								heading1 = ((link[2] - centerHeading) * (Math.PI/180) + (Math.PI*3/2)) % (Math.PI*2),
+								heading1 = normalizeRad(link[2] - centerHeading - deg2rad(90)),
 								vec = $V([0,dist1]).rotate(-heading1, [0,0]);
 							
 							link[3] = link[3].add(vec);
 							
 							var dist2 = link[3].distanceFrom(Vector.Zero(2));
-							
-							//console.log('$', dist2, data.Links.length);
-							
+
 							if(dist2 < 80 && data.Links.length == 2) {
 								for(var i = 0; i < data.Links.length; ++i) {
-									var heading2 = parseFloat(data.Links[i].yawDeg);
+									var heading2 = deg2rad(parseFloat(data.Links[i].yawDeg));
 									
-									//console.log(data.Links[i].panoId, link[2], heading2, Math.abs(link[2] - heading2));
-									
-									if(Math.abs(link[2] - heading2) < 45
-									|| Math.abs(link[2] - heading2) > (360 - 45)) {//console.log('->');
+									if(Math.abs(link[2] - heading2) < deg2rad(45)
+									|| Math.abs(link[2] - heading2) > deg2rad(-45)) {
 										link = [
 											data.Links[i].panoId,
 											new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng),
@@ -665,7 +677,7 @@ load = function() {
 								links2.push([
 									link[0],
 									link[3].elements,
-									((Math.PI*4) + Math.atan2(link[3].elements[1], link[3].elements[0]) - (Math.PI/2)) % (Math.PI*2)
+									normalizeRad(Math.atan2(link[3].elements[1], link[3].elements[0]) - deg2rad(90))
 								]);
 								
 								if(!--nextCtr)
@@ -829,7 +841,7 @@ load = function() {
 		// finish loading and initiate update
 		
 		function() {
-			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180),
+			var rotDiff = previousCenterHeading == null ? 0 : normalizeRad(previousCenterHeading - centerHeading),
 				vec = $V(viewPos).subtract($V(linkPos)).rotate(-rotDiff, [0,0]);
 			loadPos = viewPos = vec.elements; // TODO
 			viewRot[1] += rotDiff;
@@ -922,9 +934,9 @@ update = function() {
 		viewPos = vec.elements;
 	}
 	
-	viewRot[0] = Math.max(viewRot[0], -(Math.PI/2));
-	viewRot[0] = Math.min(viewRot[0], (Math.PI/2));
-	viewRot[1] %= (Math.PI*2);
+	viewRot[0] = Math.max(viewRot[0], -deg2rad(90));
+	viewRot[0] = Math.min(viewRot[0], deg2rad(90));
+	viewRot[1] = normalizeRad(viewRot[1]);
 	
 	var cx = Math.cos(viewRot[0]),
 		sx = Math.sin(viewRot[0]),
@@ -1433,14 +1445,14 @@ update = function() {
 	// draw compass to buffer
 	
 	for(var i = 0; i < links3.length; ++i) {
-		var heading = ((Math.PI*4) + (Math.PI*3/8) - links3[i][2] - viewRot[1]) % (Math.PI*2),
+		var heading = normalizeRad(deg2rad(67.5) - links3[i][2] - viewRot[1]),
 			linkCoords,
 			linkSize;
 		
-		if(heading < (Math.PI*3/4)) {
+		if(heading < deg2rad(135)) {
 			linkSize = outSize[1] / 32;
 			linkCoords = [
-				heading / (Math.PI*3/4) * outSize[0],
+				heading / deg2rad(135) * outSize[0],
 				outSize[1] - linkSize*2,
 				1
 			];
@@ -1448,7 +1460,7 @@ update = function() {
 		else {
 			linkSize = outSize[1] / 64;
 			linkCoords = [
-				((Math.PI*2) - heading) / ((Math.PI*2) - (Math.PI*3/4)) * outSize[0],
+				normalizeRad(-heading) / deg2rad(-135) * outSize[0],
 				outSize[1] - linkSize*3,
 				-1
 			];
@@ -1459,7 +1471,7 @@ update = function() {
 		buf.save();
 		buf.translate(linkCoords[0],linkCoords[1]);
 		
-		buf.fillStyle = (heading >= (Math.PI*3/4) || dist > 0) ? '#0f0' : '#fff';
+		buf.fillStyle = (heading >= deg2rad(135) || dist > 0) ? '#0f0' : '#fff';
 		buf.strokeStyle = '#000';
 		buf.lineWidth = 1;
 		buf.beginPath();
@@ -1470,7 +1482,7 @@ update = function() {
 		buf.fill();
 		buf.stroke();
 		
-		if(heading < (Math.PI*3/4) && dist > 0) {
+		if(heading < deg2rad(135) && dist > 0) {
 			buf.fillStyle = '#fff';
 			buf.font = 'bold ' + (linkSize*3/4) + 'px sans-serif';
 			buf.textAlign = 'center';
@@ -1541,16 +1553,16 @@ function handlePressed() {
 				move(1,0);
 			break;
 			case 37: // left
-				viewRot[1] -= (Math.PI*2)/32;
+				viewRot[1] -= deg2rad(360/32);
 			break;
 			case 38: // up
-				viewRot[0] -= (Math.PI/2)/8;
+				viewRot[0] -= deg2rad(90/8);
 			break;
 			case 39: // right
-				viewRot[1] += (Math.PI*2)/32;
+				viewRot[1] += deg2rad(360/32);
 			break;
 			case 40: // down
-				viewRot[0] += (Math.PI/2)/8;
+				viewRot[0] += deg2rad(90/8);
 			break;
 			}
 		}
