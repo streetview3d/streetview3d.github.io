@@ -71,6 +71,8 @@ function radialCoord(center, angle, radius) {
 
 function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 	dstCtx.save();
+
+	// TODO extrapolate srcCoords
 	
 	var vec1 = [
 			$V(dstCoords[0]),
@@ -257,7 +259,7 @@ function qualitySegment(quads1) { // TODO
 			quads1[i][2]
 		]);
 	}
-
+	
 	return quads2;
 }
 
@@ -454,7 +456,7 @@ load = function() {
 				
 				try {
 					panoId = data.location.pano;
-					centerHeading = data.tiles.centerHeading;
+					centerHeading = data.tiles.centerHeading; // TODO radian
 				}
 				catch(e) {
 					$('#fail_data').show();
@@ -608,6 +610,8 @@ load = function() {
 		},
 		
 		// load links
+
+		// TODO missing links
 		
 		function() {
 			var nextCtr = 1;
@@ -827,7 +831,7 @@ load = function() {
 		function() {
 			var rotDiff = previousCenterHeading == null ? 0 : (previousCenterHeading - centerHeading) * (Math.PI/180),
 				vec = $V(viewPos).subtract($V(linkPos)).rotate(-rotDiff, [0,0]);
-			viewPos = vec.elements; // TODO
+			loadPos = viewPos = vec.elements; // TODO
 			viewRot[1] += rotDiff;
 			
 			var walls2 = [],
@@ -885,7 +889,7 @@ update = function() {
 	
 	// update dimensions, set canvas properties and clear buffer
 	
-	var btnSize = $("body").width()/20;
+	var btnSize = $('body').width()/20;
 	$('.btn').width(btnSize);
 	$('.btn').height(btnSize);
 	
@@ -1429,7 +1433,7 @@ update = function() {
 	// draw compass to buffer
 	
 	for(var i = 0; i < links3.length; ++i) {
-		var heading = ((Math.PI*4) + (Math.PI*3/8) + links3[i][2] - viewRot[1]) % (Math.PI*2),
+		var heading = ((Math.PI*4) + (Math.PI*3/8) - links3[i][2] - viewRot[1]) % (Math.PI*2),
 			linkCoords,
 			linkSize;
 		
@@ -1449,11 +1453,13 @@ update = function() {
 				-1
 			];
 		}
+
+		var dist = Math.floor(($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / loadDist);
 		
 		buf.save();
 		buf.translate(linkCoords[0],linkCoords[1]);
 		
-		buf.fillStyle = '#0f0';
+		buf.fillStyle = (heading >= (Math.PI*3/4) || dist > 0) ? '#0f0' : '#fff';
 		buf.strokeStyle = '#000';
 		buf.lineWidth = 1;
 		buf.beginPath();
@@ -1463,6 +1469,14 @@ update = function() {
 		buf.closePath();
 		buf.fill();
 		buf.stroke();
+		
+		if(heading < (Math.PI*3/4) && dist > 0) {
+			buf.fillStyle = '#fff';
+			buf.font = 'bold ' + (linkSize*3/4) + 'px sans-serif';
+			buf.textAlign = 'center';
+			buf.textBaseline = 'middle';
+			buf.fillText(dist,0,(-linkSize/2)*linkCoords[2]);
+		}
 		
 		buf.restore();
 	}
@@ -1545,7 +1559,7 @@ function handlePressed() {
 	if(!isMoving) {
 		loadDistPos = [0,0];
 	}
-	loadDist = $V(loadDistPos).distanceFrom(Vector.Zero(2)) / 2;
+	loadDist = $V(loadDistPos).distanceFrom(Vector.Zero(2)) / 4;
 	loadDist = Math.max(loadDist,1);
 	loadDist = Math.min(loadDist,40);
 	
