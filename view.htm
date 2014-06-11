@@ -49,8 +49,6 @@ Look:
 // TODO check format, todos, comments
 // TODO readme
 
-// TODO minwallradius smooth
-
 // global accessible functions and initialization
 
 var load = function() {},
@@ -213,7 +211,7 @@ function transformQuad2(srcCtx, srcCoords, dstCtx, dstCoords, center) {
 
 // segment quads for quality mode
 
-function qualitySegment(quads1) { // TODO central ground
+function qualitySegment(quads1) {
 	var quads2 = [];
 	
 	for(var i = 0; i < quads1.length; ++i) {
@@ -352,32 +350,22 @@ var zoomLevel = 3,
 
 // global coeffs
 
-var coeff = { // TODO
+var coeff = { // TODO +
 	wallNum: 32,
+	wallHeight: 80,
+	camHeight: 2.75,
 	groundRadius: 80,
 	minWallRadius: 10,
+	minWallRadiusThreshold: 20,
 	maxWallRadius: 70,
 	maxWallRadius2: 100,
 	minLinkRadius: 20,
 	maxLinkRadius: 80,
-	wallHeight: 80,
-	camHeight: 2.75,
-	loadDistQuota: 2, 
-	maxLoadDist: 80,
-	skipTolerance: deg2rad(45),
-	compassTolerance: deg2rad(135/2),
-	moveSpeed: 1.5,
-	moveSpeedLoading: 0.75,
-	viewYawStep: deg2rad(360/32),
-	viewPitchStep: deg2rad(90/8),
-	compassSizeQuota: 32,
-	keyInterval: 100,
-	keyIntervalLoadingMult: 5,
-	segmentNearDist: 20,
-	mergeWallsDist: 40,
-	mergeWallsTolerance: 5,
 	removeTreeDist: 20,
 	removeTreeQuota: 2,
+	mergeWallsDist: 40,
+	mergeWallsTolerance: 5,
+	segmentNearDist: 20,
 	loadWallPitchNum: 4,
 	loadGroundPitchNum: 4,
 	loadGroundYawStart: 4,
@@ -399,7 +387,18 @@ var coeff = { // TODO
 		0,
 		3,
 		8
-	]
+	],
+	skipTolerance: deg2rad(45),
+	compassTolerance: deg2rad(135/2),
+	compassSizeQuota: 32,
+	loadDistQuota: 2, 
+	maxLoadDist: 80,
+	moveSpeed: 1.5,
+	moveSpeedLoading: 0.75,
+	viewYawStep: deg2rad(360/32),
+	viewPitchStep: deg2rad(90/8),
+	keyInterval: 100,
+	keyIntervalLoadingMult: 5
 };
 
 // loaded resources
@@ -623,6 +622,9 @@ load = function() {
 								v[1] *= t;
 								v[2] *= t;
 								depth = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+								if(depth < coeff.minWallRadiusThreshold) {
+									depth = coeff.minWallRadiusThreshold - (coeff.minWallRadiusThreshold - depth) / 2
+								}
 								depth = Math.max(depth, coeff.minWallRadius);
 								depth = Math.min(depth, coeff.maxWallRadius2);
 							}
@@ -902,7 +904,7 @@ load = function() {
 		function() {
 			var rotDiff = previousCenterHeading == null ? 0 : normalizeRad(previousCenterHeading - centerHeading),
 				vec = $V(viewPos).subtract($V(linkPos)).rotate(-rotDiff, [0,0]);
-			loadPos = viewPos = vec.elements; // TODO
+			loadPos = viewPos = vec.elements; // TODO check wrong pos after loading
 			viewRot[1] += rotDiff;
 			
 			var walls2 = [],
