@@ -7,7 +7,7 @@ While traditional Street View offers a single-perspective panorama with controls
 The location can be specified in the browser's address bar by typing in the address of the desired location or its geographical coordinates, as they are found on Google Maps.
 
 * [https://streetview3d.github.io/view.htm?loc=39.955041,-75.176962](https://streetview3d.github.io/view.htm?loc=39.955041,-75.176962) Philadelphia
-* [https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091&turn=1](https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091&turn=1) Atlanta
+* [https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091](https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091) Atlanta
 * [https://streetview3d.github.io/view.htm?loc=35.677337,139.763216](https://streetview3d.github.io/view.htm?loc=35.677337,139.763216) Tokyo
 * [https://streetview3d.github.io/view.htm?loc=33.483872,-112.070874](https://streetview3d.github.io/view.htm?loc=33.483872,-112.070874) Venture
 
@@ -20,6 +20,18 @@ Use the cursor keys (arrow keys) on the right side of your keyboard to look arou
 ### Mobile Buttons
 
 Mobile devices often have no keyboards. Press "Show buttons" to steer on a touch screen.
+
+### Compass
+
+Move in the 
+
+### Performance
+
+smaller
+
+### High Quality Mode
+
+
 
 ### Tested Browser compatibility
 

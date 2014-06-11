@@ -14,7 +14,7 @@
 <tr><td id="outCont" style="text-align:center; height:100%;">
 <div id="fail_js">You have to enable Javascript in your browser!</div>
 <div id="fail_data" style="display:none;">Sorry, no Street View data found for this address!</div>
-<div id="fail_query" style="display:none;">Specify the address or location in the browser's address bar, e.g. <span style="color:#ccf;">https://streetview3d.github.io/view.htm?loc=ABC, DEF 12345, USA</span> or <span style="color:#ccf;">https://streetview3d.github.io/view.htm?loc=40.263809,-77.438736</span></div>
+<div id="fail_query" style="display:none;">Specify the address or location in the browser's address bar, e.g. <span style="color:#ccf;">https://streetview3d.github.io/view.htm?loc=</span> or <span style="color:#ccf;">https://streetview3d.github.io/view.htm?loc=</span></div>
 <div id="fail_gen" style="display:none;">Something went wrong...</div>
 <div id="fail_key" style="display:none;">Sorry, it seems that Google has revoked my API Key...</div>
 <canvas id="outImg">You have to look for a browser, which supports HTML5!</canvas>
@@ -43,6 +43,13 @@ Look:
 <script type="text/javascript">
 
 // TODO fail location
+
+// TODO aspect ratio
+// TODO check fail,browser,os,modes,z-sort,gaps,coeffs
+// TODO check format, todos, comments
+// TODO readme
+
+// TODO minwallradius smooth
 
 // global accessible functions and initialization
 
@@ -323,7 +330,16 @@ var viewPos = [.07,.03],
 
 // configure initial heading
 
-if(getParam('turn') == '1') // TODO n,e,s,w
+switch(getParam('turn')) { // TODO n,e,s,w
+case 'n':
+break;
+case 'e':
+break;
+case 's':
+break;
+case 'w':
+break;
+}
 	viewRot[1] += deg2rad(180);
 
 // constant query parameters
@@ -337,10 +353,53 @@ var zoomLevel = 3,
 // global coeffs
 
 var coeff = { // TODO
-	groundRadius: 100,
-	wallRadius: 100,
-	wallHeigth: 80,
-	cameraHeight: 2.75
+	wallNum: 32,
+	groundRadius: 80,
+	minWallRadius: 10,
+	maxWallRadius: 70,
+	maxWallRadius2: 100,
+	minLinkRadius: 20,
+	maxLinkRadius: 80,
+	wallHeight: 80,
+	camHeight: 2.75,
+	loadDistQuota: 2, 
+	maxLoadDist: 80,
+	skipTolerance: deg2rad(45),
+	compassTolerance: deg2rad(135/2),
+	moveSpeed: 1.5,
+	moveSpeedLoading: 0.75,
+	viewYawStep: deg2rad(360/32),
+	viewPitchStep: deg2rad(90/8),
+	compassSizeQuota: 32,
+	keyInterval: 100,
+	keyIntervalLoadingMult: 5,
+	segmentNearDist: 20,
+	mergeWallsDist: 40,
+	mergeWallsTolerance: 5,
+	removeTreeDist: 20,
+	removeTreeQuota: 2,
+	loadWallPitchNum: 4,
+	loadGroundPitchNum: 4,
+	loadGroundYawStart: 4,
+	loadGroundYawStartQuality: 8,
+	groundTblMax: 8,
+	groundTbl: [
+		-8,
+		-3,
+		-1,
+		0,
+		1,
+		3,
+		8
+	],
+	ceilingTblMax: 8,
+	ceilingTbl: [
+		-8,
+		-3,
+		0,
+		3,
+		8
+	]
 };
 
 // loaded resources
@@ -366,7 +425,7 @@ load = function() {
 	
 	var linkPos = [0,0],
 		previousCenterHeading = centerHeading,
-		nearestAngle = deg2rad(67.5);
+		nearestAngle = coeff.compassTolerance;
 	for(var i = 0; i < links3.length; ++i) {
 		var posLinkDist = $V(loadPos).distanceFrom($V(links3[i][1])),
 			posCenterDist = $V(loadPos).distanceFrom(Vector.Zero(2)),
@@ -379,7 +438,7 @@ load = function() {
 		}
 	}
 	
-	if(!forceLoad && panoId != null && nearestAngle == deg2rad(67.5)) {
+	if(!forceLoad && panoId != null && nearestAngle == coeff.compassTolerance) {
 		isLoading = false;
 		return;
 	}
@@ -543,13 +602,13 @@ load = function() {
 					}
 					
 					var depthMap4 = [];
-					for(var yaw = 0; yaw < 32; ++yaw) {
+					for(var yaw = 0; yaw < coeff.wallNum; ++yaw) {
 						var depthMap3 = [];
-						for(var pitch = 2; pitch <= 4; ++pitch) {
-							var x = yaw * width / 32,
-								y = height / 2 - (pitch - 2) * height / 32,
+						for(var pitch = 0; pitch < 3; ++pitch) {
+							var x = yaw * width / coeff.wallNum,
+								y = height / 2 - pitch * height / coeff.wallNum,
 								index = depthMap1[offset + y * width + x],
-								depth = 100;
+								depth = coeff.maxWallRadius2;
 							if(index > 0) {
 								var phi = (width - x - 1) / (width - 1) * 2 * (Math.PI) + (Math.PI/2),
 									theta = (height - y - 1) / (height - 1) * (Math.PI),
@@ -564,22 +623,22 @@ load = function() {
 								v[1] *= t;
 								v[2] *= t;
 								depth = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
-								depth = Math.max(depth, 10);
-								depth = Math.min(depth, 100);
+								depth = Math.max(depth, coeff.minWallRadius);
+								depth = Math.min(depth, coeff.maxWallRadius2);
 							}
 							depthMap3[pitch] = depth;
 						}
 						
-						depthMap4[yaw] = (depthMap3[2]*4 + depthMap3[3]*2 + depthMap3[4]) / 7;
-						depthMap4[yaw] = Math.min(depthMap4[yaw], 70);
+						depthMap4[yaw] = (depthMap3[0]*4 + depthMap3[1]*2 + depthMap3[2]) / 7;
+						depthMap4[yaw] = Math.min(depthMap4[yaw], coeff.maxWallRadius);
 					}
 					
 					var depthMap5 = [];
-					for(var yaw = 0; yaw < 32; ++yaw) {
-						var middle = (depthMap4[(yaw + 32 - 1) % 32] + depthMap4[(yaw + 1) % 32]) / 2,
+					for(var yaw = 0; yaw < coeff.wallNum; ++yaw) {
+						var middle = (depthMap4[(yaw + coeff.wallNum - 1) % coeff.wallNum] + depthMap4[(yaw + 1) % coeff.wallNum]) / 2,
 							amount = Math.abs(depthMap4[yaw] - middle);
-						if(amount >= 20
-						&& Math.abs(depthMap4[(yaw + 32 - 1) % 32] - depthMap4[(yaw + 1) % 32]) <= amount / 2) {
+						if(amount >= coeff.removeTreeDist
+						&& Math.abs(depthMap4[(yaw + coeff.wallNum - 1) % coeff.wallNum] - depthMap4[(yaw + 1) % coeff.wallNum]) <= amount / coeff.removeTreeQuota) {
 							depthMap5[yaw] = middle;
 						}
 						else {
@@ -650,12 +709,12 @@ load = function() {
 							
 							var dist2 = link[3].distanceFrom(Vector.Zero(2));
 
-							if(dist2 < 80 && data.Links.length == 2) {
+							if(dist2 < coeff.maxLinkRadius && data.Links.length == 2) {
 								for(var i = 0; i < data.Links.length; ++i) {
 									var heading2 = deg2rad(parseFloat(data.Links[i].yawDeg));
 									
-									if(Math.abs(link[2] - heading2) < deg2rad(45)
-									|| Math.abs(link[2] - heading2) > deg2rad(-45)) {
+									if(Math.abs(link[2] - heading2) < coeff.skipTolerance
+									|| Math.abs(link[2] - heading2) > normalizeRad(-coeff.skipTolerance)) {
 										link = [
 											data.Links[i].panoId,
 											new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng),
@@ -669,10 +728,10 @@ load = function() {
 							}
 							
 							{
-								if(dist2 > 80)
-									link[3] = link[3].x(80/dist2);
-								if(dist2 < 20)
-									link[3] = link[3].x(dist2/20);
+								if(dist2 < coeff.minLinkRadius)
+									link[3] = link[3].x(dist2/coeff.minLinkRadius);
+								if(dist2 > coeff.maxLinkRadius)
+									link[3] = link[3].x(coeff.maxLinkRadius/dist2);
 								
 								links2.push([
 									link[0],
@@ -714,11 +773,11 @@ load = function() {
 				for(var yaw = 0; yaw < yaws; ++yaw) {
 					var pre = [
 						panoImg.width / yaws,
-						1 / (1 << 3) * 80 / (ceiling ? 77.5 : 2.75),
+						1 / (1 << (coeff.loadGroundPitchNum - 1)) * coeff.wallHeight / (ceiling ? (coeff.wallHeight - coeff.camHeight) : coeff.camHeight),
 						1 / (Math.PI/2) * panoImg.height / 2,
 						1 / yaws * (Math.PI*2),
 						Math.cos(1 / yaws * (Math.PI*2)),
-						1 / (1 << 3) * tex2Size[0] / 2,
+						1 / (1 << (coeff.loadGroundPitchNum - 1)) * tex2Size[0] / 2,
 						[tex2Size[0] / 2,tex2Size[1] / 2]
 					],
 					srcCoords1 = [
@@ -744,8 +803,8 @@ load = function() {
 						pitch2 * pre[5]
 					],
 					dstCoords2 = [
-						dstCoords1[2] * (pitch <= 3 && (yaw % 2) ? pre[4] : 1),
-						dstCoords1[2] * (pitch <= 3 && (!(yaw % 2)) ? pre[4] : 1)
+						dstCoords1[2] * ((yaw % 2) ? pre[4] : 1),
+						dstCoords1[2] * ((!(yaw % 2)) ? pre[4] : 1)
 					],
 					dstCoords3 = [
 						radialCoord(pre[6], dstCoords1[0], dstCoords2[0]),
@@ -763,10 +822,10 @@ load = function() {
 			}
 			
 			for(var ceiling = 0; ceiling < 2; ++ceiling) {
-				for(var pitch = 0; pitch < 4; ++pitch) {
+				for(var pitch = 0; pitch < coeff.loadGroundPitchNum; ++pitch) {
 					var pitch2 = 1 << pitch,
 						pitch1 = pitch2 >> 1,
-						yaws = 4 << Math.min(pitch, 3);
+						yaws = (qualityMode ? coeff.loadGroundYawStartQuality : coeff.loadGroundYawStart) << pitch;
 					
 					nextCtr++;
 					callList1.push([ceiling, yaws, pitch, pitch1, pitch2]);
@@ -780,18 +839,18 @@ load = function() {
 				var params = callList2.pop(),
 					pitch = params[0];
 				
-				for(var yaw = 0; yaw < 32; ++yaw) {
+				for(var yaw = 0; yaw < coeff.wallNum; ++yaw) {
 					var pre = [
-						panoImg.width / 32,
+						panoImg.width / coeff.wallNum,
 						1 / (Math.PI/2) * panoImg.height / 2
 					],
 					srcCoords1 = [
 						yaw * pre[0],
 						(yaw+1) * pre[0],
-						(pitch * 20 - 2.75),
-						((pitch+1) * 20 - 2.75),
+						(pitch * (coeff.wallHeight / coeff.loadWallPitchNum) - coeff.camHeight),
+						((pitch+1) * (coeff.wallHeight / coeff.loadWallPitchNum) - coeff.camHeight),
 						walls1[yaw],
-						walls1[(yaw+1) % 32]
+						walls1[(yaw+1) % coeff.wallNum]
 					],
 					srcCoords2 = [
 						panoImg.height / 2 - Math.atan(srcCoords1[2] / srcCoords1[4]) * pre[1],
@@ -808,8 +867,8 @@ load = function() {
 					dstCoords1 = [
 						yaw * pre[0],
 						(yaw+1) * pre[0],
-						tex1Size[1] - pitch * tex1Size[1] / 4,
-						tex1Size[1] - (pitch+1) * tex1Size[1] / 4
+						tex1Size[1] - pitch * tex1Size[1] / coeff.loadWallPitchNum,
+						tex1Size[1] - (pitch+1) * tex1Size[1] / coeff.loadWallPitchNum
 					],
 					dstCoords2 = [
 						[dstCoords1[0], dstCoords1[2]],
@@ -826,7 +885,7 @@ load = function() {
 					next();
 			}
 			
-			for(var pitch = 0; pitch < 4; ++pitch) {
+			for(var pitch = 0; pitch < coeff.loadWallPitchNum; ++pitch) {
 				nextCtr++;
 				callList2.push([pitch]);
 			}
@@ -848,17 +907,17 @@ load = function() {
 			
 			var walls2 = [],
 				mergeNext = false;
-			for(var i = 0; i < 32; ++i) {
+			for(var i = 0; i < coeff.wallNum; ++i) {
 				if(mergeNext
-				&& i >= 1 && i < 31
-				&& walls1[i - 1] <= 40 && walls1[i] <= 40 && walls1[i + 1] <= 40
-				&& Math.abs(walls1[i - 1] - walls1[i + 1]) <= 5) {
+				&& i > 0 && i < (coeff.wallNum - 1)
+				&& walls1[i - 1] <= coeff.mergeWallsDist && walls1[i] <= coeff.mergeWallsDist && walls1[i + 1] <= coeff.mergeWallsDist
+				&& Math.abs(walls1[i - 1] - walls1[i + 1]) <= coeff.mergeWallsTolerance) {
 					mergeNext = false;
 					continue;
 				}
 				
 				walls2.push([
-					radialCoord([0,0], -(i / 32 * (Math.PI*2)), walls1[i]),
+					radialCoord([0,0], -(i / coeff.wallNum * (Math.PI*2)), walls1[i]),
 					i
 				]);
 				mergeNext = true;
@@ -929,8 +988,8 @@ update = function() {
 	
 	var vec = $V(viewPos),
 		dist = vec.distanceFrom(Vector.Zero(2));
-	if(dist > 70) {
-		vec = vec.x(70/dist);
+	if(dist > coeff.maxWallRadius) {
+		vec = vec.x(coeff.maxWallRadius/dist);
 		viewPos = vec.elements;
 	}
 	
@@ -972,29 +1031,20 @@ update = function() {
 	
 	// build ground, translate and rotate
 	
-	var groundTbl = [
-		-8,
-		-3,
-		-1,
-		0,
-		1,
-		3,
-		8
-	];
 	var ground = [];
-	for(var i = 0; i < groundTbl.length; ++i) {
-		var i1 = groundTbl[i],
-			i2 = groundTbl[i + 1];
+	for(var i = 0; i < coeff.groundTbl.length; ++i) {
+		var i1 = coeff.groundTbl[i],
+			i2 = coeff.groundTbl[i + 1];
 		
-		for(var j = 0; j < groundTbl.length; ++j) {
-			var j1 = groundTbl[j],
-				j2 = groundTbl[j + 1];
+		for(var j = 0; j < coeff.groundTbl.length; ++j) {
+			var j1 = coeff.groundTbl[j],
+				j2 = coeff.groundTbl[j + 1];
 			
 			var pre = [
 				tex2Size[0] / 2,
 				tex2Size[1] / 2,
-				tex2Size[0] / 16,
-				tex2Size[1] / 16
+				tex2Size[0] / (coeff.groundTblMax*2),
+				tex2Size[1] / (coeff.groundTblMax*2)
 			],
 			srcVerts1 = [
 				pre[0] + j1 * pre[2],
@@ -1003,10 +1053,10 @@ update = function() {
 				pre[1] - i2 * pre[3],
 			],
 			dstVerts1 = [
-				j1 * 10,
-				j2 * 10,
-				i1 * 10,
-				i2 * 10
+				j1 * (coeff.groundRadius / coeff.groundTblMax),
+				j2 * (coeff.groundRadius / coeff.groundTblMax),
+				i1 * (coeff.groundRadius / coeff.groundTblMax),
+				i2 * (coeff.groundRadius / coeff.groundTblMax)
 			],
 			dstVerts2 = [
 				[dstVerts1[0],0,dstVerts1[2]],
@@ -1043,27 +1093,20 @@ update = function() {
 	
 	// build ceiling, translate and rotate
 	
-	var ceilingTbl = [
-		-8,
-		-3,
-		0,
-		3,
-		8
-	];
 	var ceiling = [];
-	for(var i = 0; i < ceilingTbl.length; ++i) {
-		var i1 = ceilingTbl[i],
-			i2 = ceilingTbl[i + 1];
+	for(var i = 0; i < coeff.ceilingTbl.length; ++i) {
+		var i1 = coeff.ceilingTbl[i],
+			i2 = coeff.ceilingTbl[i + 1];
 		
-		for(var j = 0; j < ceilingTbl.length; ++j) {
-			var j1 = ceilingTbl[j],
-				j2 = ceilingTbl[j + 1];
+		for(var j = 0; j < coeff.ceilingTbl.length; ++j) {
+			var j1 = coeff.ceilingTbl[j],
+				j2 = coeff.ceilingTbl[j + 1];
 			
 			var pre = [
 				tex2Size[0] / 2,
 				tex2Size[1] / 2,
-				tex2Size[0] / 16,
-				tex2Size[1] / 16
+				tex2Size[0] / (coeff.ceilingTblMax*2),
+				tex2Size[1] / (coeff.ceilingTblMax*2)
 			],
 			srcVerts1 = [
 				pre[0] + j1 * pre[2],
@@ -1072,16 +1115,16 @@ update = function() {
 				pre[1] - i2 * pre[3],
 			],
 			dstVerts1 = [
-				j1 * 10,
-				j2 * 10,
-				i1 * 10,
-				i2 * 10
+				j1 * (coeff.groundRadius / coeff.ceilingTblMax),
+				j2 * (coeff.groundRadius / coeff.ceilingTblMax),
+				i1 * (coeff.groundRadius / coeff.ceilingTblMax),
+				i2 * (coeff.groundRadius / coeff.ceilingTblMax)
 			],
 			dstVerts2 = [
-				[dstVerts1[1],80,dstVerts1[2]],
-				[dstVerts1[1],80,dstVerts1[3]],
-				[dstVerts1[0],80,dstVerts1[3]],
-				[dstVerts1[0],80,dstVerts1[2]]
+				[dstVerts1[1],coeff.wallHeight,dstVerts1[2]],
+				[dstVerts1[1],coeff.wallHeight,dstVerts1[3]],
+				[dstVerts1[0],coeff.wallHeight,dstVerts1[3]],
+				[dstVerts1[0],coeff.wallHeight,dstVerts1[2]]
 			];
 			for(var k = 0; k < 4; ++k) {
 				dstVerts2[k][3] = 1;
@@ -1116,8 +1159,8 @@ update = function() {
 	for(var i = 0; i < walls3.length; ++i) {
 		var dstVerts1 = [
 			[walls3[i][0][0],0,walls3[i][0][1]],
-			[walls3[i][0][0],80,walls3[i][0][1]],
-			[walls3[(i + 1) % walls3.length][0][0],80,walls3[(i + 1) % walls3.length][0][1]],
+			[walls3[i][0][0],coeff.wallHeight,walls3[i][0][1]],
+			[walls3[(i + 1) % walls3.length][0][0],coeff.wallHeight,walls3[(i + 1) % walls3.length][0][1]],
 			[walls3[(i + 1) % walls3.length][0][0],0,walls3[(i + 1) % walls3.length][0][1]],
 		],
 		dstVec = [
@@ -1141,12 +1184,9 @@ update = function() {
 			]
 		];
 		
-		var right = walls3[(i + 1) % walls3.length][1] * tex1Size[0] / 32;
-		if(!right)
-			right = tex1Size[0];
 		var srcCoords = [
-			walls3[i][1] * tex1Size[0] / 32,
-			right,
+			walls3[i][1] * tex1Size[0] / coeff.wallNum,
+			((walls3[(i + 1) % walls3.length][1] + coeff.wallNum - 1) % coeff.wallNum + 1) * tex1Size[0] / coeff.wallNum,
 			tex1Size[1],
 			tex1Size[1] * 2 / 3,
 			0
@@ -1219,18 +1259,18 @@ update = function() {
 		var srcVerts2 = [],
 			dstVerts2 = [];
 		for(var j = 0; j < dstVerts1.length; ++j) {
-			if(dstVerts1[j][0][2] <= 20
-			|| dstVerts1[j][1][2] <= 20
-			|| dstVerts1[j][2][2] <= 20) {
+			if(dstVerts1[j][0][2] <= coeff.segmentNearDist
+			|| dstVerts1[j][1][2] <= coeff.segmentNearDist
+			|| dstVerts1[j][2][2] <= coeff.segmentNearDist) {
 				var srcMiddle2 = [
-						$V(srcVerts1[j][0]).add($V(srcVerts1[j][1])).x(.5),
-						$V(srcVerts1[j][1]).add($V(srcVerts1[j][2])).x(.5),
-						$V(srcVerts1[j][2]).add($V(srcVerts1[j][0])).x(.5)
+						$V(srcVerts1[j][0]).add($V(srcVerts1[j][1])).x(1/2),
+						$V(srcVerts1[j][1]).add($V(srcVerts1[j][2])).x(1/2),
+						$V(srcVerts1[j][2]).add($V(srcVerts1[j][0])).x(1/2)
 					],
 					dstMiddle2 = [
-						$V(dstVerts1[j][0]).add($V(dstVerts1[j][1])).x(.5),
-						$V(dstVerts1[j][1]).add($V(dstVerts1[j][2])).x(.5),
-						$V(dstVerts1[j][2]).add($V(dstVerts1[j][0])).x(.5)
+						$V(dstVerts1[j][0]).add($V(dstVerts1[j][1])).x(1/2),
+						$V(dstVerts1[j][1]).add($V(dstVerts1[j][2])).x(1/2),
+						$V(dstVerts1[j][2]).add($V(dstVerts1[j][0])).x(1/2)
 					];
 				srcVerts2.push([
 					srcMiddle2[0].elements,
@@ -1445,33 +1485,33 @@ update = function() {
 	// draw compass to buffer
 	
 	for(var i = 0; i < links3.length; ++i) {
-		var heading = normalizeRad(deg2rad(67.5) - links3[i][2] - viewRot[1]),
+		var heading = normalizeRad(coeff.compassTolerance - links3[i][2] - viewRot[1]),
 			linkCoords,
 			linkSize;
 		
-		if(heading < deg2rad(135)) {
-			linkSize = outSize[1] / 32;
+		if(heading < (coeff.compassTolerance*2)) {
+			linkSize = outSize[1] / coeff.compassSizeQuota;
 			linkCoords = [
-				heading / deg2rad(135) * outSize[0],
-				outSize[1] - linkSize*2,
+				heading / (coeff.compassTolerance*2) * outSize[0],
+				outSize[1] - (linkSize*2),
 				1
 			];
 		}
 		else {
-			linkSize = outSize[1] / 64;
+			linkSize = outSize[1] / (coeff.compassSizeQuota << 1);
 			linkCoords = [
-				normalizeRad(-heading) / deg2rad(-135) * outSize[0],
+				normalizeRad(-heading) / normalizeRad(-coeff.compassTolerance*2) * outSize[0],
 				outSize[1] - linkSize*3,
 				-1
 			];
 		}
 
-		var dist = Math.floor(($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / loadDist);
+		var dist = Math.ceil(($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / loadDist);
 		
 		buf.save();
 		buf.translate(linkCoords[0],linkCoords[1]);
 		
-		buf.fillStyle = (heading >= deg2rad(135) || dist > 0) ? '#0f0' : '#fff';
+		buf.fillStyle = (heading >= (coeff.compassTolerance*2) || dist > 0) ? '#0f0' : '#fff';
 		buf.strokeStyle = '#000';
 		buf.lineWidth = 1;
 		buf.beginPath();
@@ -1482,7 +1522,7 @@ update = function() {
 		buf.fill();
 		buf.stroke();
 		
-		if(heading < deg2rad(135) && dist > 0) {
+		if(heading < (coeff.compassTolerance*2) && dist > 0) {
 			buf.fillStyle = '#fff';
 			buf.font = 'bold ' + (linkSize*3/4) + 'px sans-serif';
 			buf.textAlign = 'center';
@@ -1516,11 +1556,11 @@ update = function() {
 var isMoving = false;
 function move(x,z) {
 	isMoving = true;
-	var vec = $V([x,z]).x(isLoading ? 1 : 2).rotate(-viewRot[1], [0,0]);
+	var vec = $V([x,z]).rotate(-viewRot[1], [0,0]);
 	
-	viewPos = $V(viewPos).add(vec).elements;
+	viewPos = $V(viewPos).add(vec.x(isLoading ? coeff.moveSpeedLoading : coeff.moveSpeed)).elements;
+	loadDistPos = $V(loadDistPos).add(vec.x(isLoading ? coeff.moveSpeedLoading : coeff.moveSpeed)).elements;
 	loadPos = $V(viewPos).add(vec.x(loadDist)).elements;
-	loadDistPos = $V(loadDistPos).add(vec).elements;
 	
 	setTimeout(load, 1);
 }
@@ -1553,16 +1593,16 @@ function handlePressed() {
 				move(1,0);
 			break;
 			case 37: // left
-				viewRot[1] -= deg2rad(360/32);
+				viewRot[1] -= coeff.viewYawStep;
 			break;
 			case 38: // up
-				viewRot[0] -= deg2rad(90/8);
+				viewRot[0] -= coeff.viewPitchStep;
 			break;
 			case 39: // right
-				viewRot[1] += deg2rad(360/32);
+				viewRot[1] += coeff.viewYawStep;
 			break;
 			case 40: // down
-				viewRot[0] += deg2rad(90/8);
+				viewRot[0] += coeff.viewPitchStep;
 			break;
 			}
 		}
@@ -1571,17 +1611,17 @@ function handlePressed() {
 	if(!isMoving) {
 		loadDistPos = [0,0];
 	}
-	loadDist = $V(loadDistPos).distanceFrom(Vector.Zero(2)) / 4;
+	loadDist = $V(loadDistPos).distanceFrom(Vector.Zero(2)) / coeff.loadDistQuota;
 	loadDist = Math.max(loadDist,1);
-	loadDist = Math.min(loadDist,40);
+	loadDist = Math.min(loadDist,coeff.maxLoadDist);
 	
 	pressedOnce = [];
 	if(isPressed){
 		if(!isLoading)
 			skipCtr = 0;
-		if(!(skipCtr++ % 5))
+		if(!(skipCtr++ % coeff.keyIntervalLoadingMult))
 			setTimeout(update, 1);
-		setTimeout(handlePressed, 100);
+		setTimeout(handlePressed, coeff.keyInterval);
 	}
 	else {
 		pressedTimer = false;
