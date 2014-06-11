@@ -90,7 +90,7 @@ function deg2rad(degree) {
 
 function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 	dstCtx.save();
-
+	
 	for(var i = 0; i < 2; ++i) {
 		var vec1 = [
 				$V((i ? dstCoords : srcCoords)[0]),
@@ -120,7 +120,7 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 				vec1[1].distanceFrom(center),
 				vec1[2].distanceFrom(center)
 			];
-	
+		
 		for(var j = 0; j < 3; ++j) {
 			(i ? dstCoords : srcCoords)[j] = pre2[j].x((pre2[j + 3] + Math.min((i ? 1/2 : 1/4) / pre1[j + 3], (i ? 3 : 3))) / pre2[j + 3]).add(center).elements;
 		}
@@ -326,20 +326,6 @@ var viewPos = [.07,.03],
 	panoId = null,
 	centerHeading = null;
 
-// configure initial heading
-
-switch(getParam('turn')) { // TODO n,e,s,w
-case 'n':
-break;
-case 'e':
-break;
-case 's':
-break;
-case 'w':
-break;
-}
-	viewRot[1] += deg2rad(180);
-
 // constant query parameters
 
 var zoomLevel = 3,
@@ -392,7 +378,7 @@ var coeff = { // TODO +
 	compassTolerance: deg2rad(135/2),
 	compassSizeQuota: 32,
 	loadDistQuota: 2, 
-	maxLoadDist: 80,
+	maxLoadDist: 60,
 	moveSpeed: 1.5,
 	moveSpeedLoading: 0.75,
 	viewYawStep: deg2rad(360/32),
@@ -410,6 +396,7 @@ var texImg2 = null,
 
 // panorama load routine
 
+var initialLoading = true;
 var isLoading = false;
 
 load = function() {
@@ -437,7 +424,7 @@ load = function() {
 		}
 	}
 	
-	if(!forceLoad && panoId != null && nearestAngle == coeff.compassTolerance) {
+	if(!forceLoad && !initialLoading && nearestAngle == coeff.compassTolerance) {
 		isLoading = false;
 		return;
 	}
@@ -495,7 +482,7 @@ load = function() {
 					$('#fail_key').show();
 			}, 4000);
 			
-			if(panoId != null) {
+			if(!initialLoading) {
 				next();
 			}
 			else {
@@ -543,7 +530,7 @@ load = function() {
 				next();
 			}
 			
-			if(panoId != null) {
+			if(!initialLoading) {
 				new google.maps.StreetViewService().getPanoramaById(
 					panoId,
 					success
@@ -687,7 +674,7 @@ load = function() {
 		},
 		
 		// load links
-
+		
 		// TODO missing links
 		
 		function() {
@@ -710,7 +697,7 @@ load = function() {
 							link[3] = link[3].add(vec);
 							
 							var dist2 = link[3].distanceFrom(Vector.Zero(2));
-
+							
 							if(dist2 < coeff.maxLinkRadius && data.Links.length == 2) {
 								for(var i = 0; i < data.Links.length; ++i) {
 									var heading2 = deg2rad(parseFloat(data.Links[i].yawDeg));
@@ -731,7 +718,7 @@ load = function() {
 							
 							{
 								if(dist2 < coeff.minLinkRadius)
-									link[3] = link[3].x(dist2/coeff.minLinkRadius);
+									link[3] = link[3].x(coeff.minLinkRadius/dist2);
 								if(dist2 > coeff.maxLinkRadius)
 									link[3] = link[3].x(coeff.maxLinkRadius/dist2);
 								
@@ -902,10 +889,43 @@ load = function() {
 		// finish loading and initiate update
 		
 		function() {
+			
+			// configure initial heading
+			
+			if(initialLoading) {
+				var initHeading1 = deg2rad(0),
+					initHeading2 = deg2rad(0),
+					nearestAngle = deg2rad(90);
+				switch(getParam('dir')) {
+				case 'n': initHeading1 = deg2rad(0); break;
+				case 'e': initHeading1 = deg2rad(90); break;
+				case 's': initHeading1 = deg2rad(180); break;
+				case 'w': initHeading1 = deg2rad(270); break;
+				}
+				initHeading1 = normalizeRad(initHeading1 - centerHeading - deg2rad(90));
+				
+				for(var i = 0; i < links2.length; ++i) {
+					var heading = normalizeRad(Math.atan2(links2[i][1][1], links2[i][1][0]) - deg2rad(90)),
+						headingAngle = Math.abs(initHeading1 - heading);
+					if(headingAngle > deg2rad(180))
+						headingAngle = normalizeRad(-headingAngle)
+					if(nearestAngle > headingAngle) {
+						nearestAngle = headingAngle;
+						initHeading2 = heading;
+					}
+				}
+				
+				viewRot[1] = initHeading2;
+			}
+			
+			// adjust view position and rotation relative to previous panorama
+			
 			var rotDiff = previousCenterHeading == null ? 0 : normalizeRad(previousCenterHeading - centerHeading),
 				vec = $V(viewPos).subtract($V(linkPos)).rotate(-rotDiff, [0,0]);
 			loadPos = viewPos = vec.elements; // TODO check wrong pos after loading
 			viewRot[1] += rotDiff;
+			
+			// convert wall depths to coords and merge close walls
 			
 			var walls2 = [],
 				mergeNext = false;
@@ -930,6 +950,7 @@ load = function() {
 			links3 = links2;
 			walls3 = walls2;
 			
+			initialLoading = false;
 			isLoading = false;
 			
 			fade = true;
@@ -949,7 +970,10 @@ var isUpdating = false,
 	fade = false;
 
 update = function() {
-	if(tex2 == null || texImg2 == null || walls3 == null)
+	
+	// wait for initial loading
+	
+	if(initialLoading)
 		return;
 	
 	// handle concurrent event
@@ -970,7 +994,7 @@ update = function() {
 	outImg.width = 1;
 	outImg.height = 1;
 	var outSize = [
-		Math.min($('#outCont').width(), $('#outCont').height()/3*4),
+		Math.min($('#outCont').width(), $('#outCont').height()/3*4), // TODO aspect ratio
 		Math.min($('#outCont').height(), $('#outCont').width()/4*3)
 	];
 	
@@ -1190,7 +1214,7 @@ update = function() {
 			walls3[i][1] * tex1Size[0] / coeff.wallNum,
 			((walls3[(i + 1) % walls3.length][1] + coeff.wallNum - 1) % coeff.wallNum + 1) * tex1Size[0] / coeff.wallNum,
 			tex1Size[1],
-			tex1Size[1] * 2 / 3,
+			tex1Size[1] * 2 / 3, // TODO coeff
 			0
 		];
 		
@@ -1507,7 +1531,7 @@ update = function() {
 				-1
 			];
 		}
-
+		
 		var dist = Math.ceil(($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / loadDist);
 		
 		buf.save();
