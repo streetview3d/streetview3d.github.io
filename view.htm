@@ -315,25 +315,6 @@ function getParam(param) {
 	return result == null ? '' : decodeURIComponent(result[1].replace(/\+/g, ' '));
 }
 
-// global state
-
-var viewPos = [.07,.03],
-	loadPos = viewPos,
-	loadDistPos = [0,0],
-	loadDist = 1,
-	viewRot = [0,-deg2rad(90)],
-	latLng = null,
-	panoId = null,
-	centerHeading = null;
-
-// constant query parameters
-
-var zoomLevel = 3,
-	panoSize = [416 << zoomLevel,(416 << zoomLevel) >> 1],
-	tileSize = [512, 512],
-	tex1Size = [panoSize[0],panoSize[1] >> 1],
-	tex2Size = [panoSize[0] >> 1,panoSize[0] >> 1];
-
 // global coeffs
 
 var coeff = { // TODO +
@@ -347,6 +328,7 @@ var coeff = { // TODO +
 	maxWallRadius2: 100,
 	minLinkRadius: 20,
 	maxLinkRadius: 80,
+	skipLinkDist: 100,
 	removeTreeDist: 20,
 	removeTreeQuota: 2,
 	mergeWallsDist: 40,
@@ -377,8 +359,8 @@ var coeff = { // TODO +
 	skipTolerance: deg2rad(45),
 	compassTolerance: deg2rad(135/2),
 	compassSizeQuota: 32,
-	loadDistQuota: 2, 
-	maxLoadDist: 60,
+	loadDistQuota: 1.5, 
+	maxLoadDist: 40,
 	moveSpeed: 1.5,
 	moveSpeedLoading: 0.75,
 	viewYawStep: deg2rad(360/32),
@@ -386,6 +368,25 @@ var coeff = { // TODO +
 	keyInterval: 100,
 	keyIntervalLoadingMult: 5
 };
+
+// constant query parameters
+
+var zoomLevel = 3,
+	panoSize = [416 << zoomLevel,(416 << zoomLevel) >> 1],
+	tileSize = [512, 512],
+	tex1Size = [panoSize[0],panoSize[1] >> 1],
+	tex2Size = [panoSize[0] >> 1,panoSize[0] >> 1];
+
+// global state
+
+var viewPos = [.07,.03],
+	loadPos = viewPos,
+	loadDistPos = [0,0],
+	loadDist = 1,
+	viewRot = [-coeff.viewPitchStep,-deg2rad(90)],
+	latLng = null,
+	panoId = null,
+	centerHeading = null;
 
 // loaded resources
 
@@ -698,7 +699,7 @@ load = function() {
 							
 							var dist2 = link[3].distanceFrom(Vector.Zero(2));
 							
-							if(dist2 < coeff.maxLinkRadius && data.Links.length == 2) {
+							if(dist2 < coeff.skipLinkDist && data.Links.length == 2) {
 								for(var i = 0; i < data.Links.length; ++i) {
 									var heading2 = deg2rad(parseFloat(data.Links[i].yawDeg));
 									
@@ -1531,8 +1532,9 @@ update = function() {
 				-1
 			];
 		}
-		
-		var dist = Math.ceil(($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / loadDist);
+
+		var scale = (loadDist / coeff.maxLoadDist) + 1;
+		var dist = Math.ceil(($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / scale);
 		
 		buf.save();
 		buf.translate(linkCoords[0],linkCoords[1]);
