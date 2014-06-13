@@ -97,7 +97,6 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 				$V((i ? dstCoords : srcCoords)[1]),
 				$V((i ? dstCoords : srcCoords)[2])
 			],
-			middle = vec1[0].add(vec1[1]).add(vec1[2]).x(1/3).elements,
 			vec2 = [
 				vec1[1].subtract(vec1[0]),
 				vec1[2].subtract(vec1[1]),
@@ -121,9 +120,8 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 				vec1[2].distanceFrom(center)
 			];
 		
-		for(var j = 0; j < 3; ++j) {
+		for(var j = 0; j < 3; ++j)
 			(i ? dstCoords : srcCoords)[j] = pre2[j].x((pre2[j + 3] + Math.min((i ? 1/2 : 1/4) / pre1[j + 3], (i ? 3 : 3))) / pre2[j + 3]).add(center).elements;
-		}
 	}
 	for(var j = 0; j < 3; ++j) {
 		srcCoords[j][0] = Math.max(srcCoords[j][0], 0);
@@ -190,9 +188,8 @@ function transformTriangle(srcImg, srcCoords, dstCtx, dstCoords, wireframe) {
 function transformQuad1(srcCtx, srcCoords, dstCtx, dstCoords, center) {
 	if(qualityMode) {
 		var quads = qualitySegment([[srcCoords,dstCoords,null]]);
-		for(var i = 0; i < 4; ++i) {
+		for(var i = 0; i < 4; ++i)
 			transformQuad2(srcCtx, quads[i][0], dstCtx, quads[i][1], (center && i < 2));
-		}
 	}
 	else {
 		transformQuad2(srcCtx, srcCoords, dstCtx, dstCoords, center);
@@ -363,7 +360,8 @@ var coeff = { // TODO +
 	maxLoadDist: 40,
 	moveSpeed: 2.5,
 	moveSpeedLoading: .5,
-	viewYawStep: deg2rad(360/32),
+	viewYawStep: deg2rad(360/128),
+	viewYawStepAccel: deg2rad(360/32),
 	viewPitchStep: deg2rad(90/8),
 	viewHeight: 5,
 	keyInterval: 100,
@@ -380,11 +378,11 @@ var zoomLevel = 3,
 
 // global state
 
-var viewPos = [.07,.03],
+var viewPos = $V([.07,.03]),
 	loadPos = viewPos,
-	loadDistPos = [0,0],
+	loadDistPos = Vector.Zero(2),
 	loadDist = 1,
-	viewRot = [coeff.viewPitchStep,-deg2rad(90)],
+	viewRot = [0,-deg2rad(90)],
 	latLng = null,
 	panoId = null,
 	centerHeading = null;
@@ -411,13 +409,13 @@ load = function() {
 	
 	// check link proximity and direction
 	
-	var linkPos = [0,0],
+	var linkPos = Vector.Zero(2),
 		previousCenterHeading = centerHeading,
 		nearestAngle = coeff.compassTolerance;
 	for(var i = 0; i < links3.length; ++i) {
-		var posLinkDist = $V(loadPos).distanceFrom($V(links3[i][1])),
-			posCenterDist = $V(loadPos).distanceFrom(Vector.Zero(2)),
-			moveAngle = $V(loadPos).subtract($V(viewPos)).angleFrom($V(links3[i][1]));
+		var posLinkDist = loadPos.distanceFrom(links3[i][1]),
+			posCenterDist = loadPos.distanceFrom(Vector.Zero(2)),
+			moveAngle = loadPos.subtract(viewPos).angleFrom(links3[i][1]);
 		if(posLinkDist < posCenterDist
 		&& nearestAngle > moveAngle) {
 			nearestAngle = moveAngle;
@@ -611,9 +609,8 @@ load = function() {
 								v[1] *= t;
 								v[2] *= t;
 								depth = Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
-								if(depth < coeff.minWallRadiusThreshold) {
+								if(depth < coeff.minWallRadiusThreshold)
 									depth = coeff.minWallRadiusThreshold - (coeff.minWallRadiusThreshold - depth) / 2
-								}
 								depth = Math.max(depth, coeff.minWallRadius);
 								depth = Math.min(depth, coeff.maxWallRadius2);
 							}
@@ -694,7 +691,7 @@ load = function() {
 						success: function(data) {
 							var dist1 = google.maps.geometry.spherical.computeDistanceBetween(link[1], new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)),
 								heading1 = normalizeRad(link[2] - centerHeading - deg2rad(90)),
-								vec = $V([0,dist1]).rotate(-heading1, [0,0]);
+								vec = $V([0,dist1]).rotate(-heading1, Vector.Zero(2));
 							
 							link[3] = link[3].add(vec);
 							
@@ -726,7 +723,7 @@ load = function() {
 								
 								links2.push([
 									link[0],
-									link[3].elements,
+									link[3],
 									normalizeRad(Math.atan2(link[3].elements[1], link[3].elements[0]) - deg2rad(90))
 								]);
 								
@@ -907,7 +904,7 @@ load = function() {
 				initHeading1 = normalizeRad(initHeading1 - centerHeading - deg2rad(90));
 				
 				for(var i = 0; i < links2.length; ++i) {
-					var heading = normalizeRad(Math.atan2(links2[i][1][1], links2[i][1][0]) - deg2rad(90)),
+					var heading = normalizeRad(Math.atan2(links2[i][1].elements[1], links2[i][1].elements[0]) - deg2rad(90)),
 						headingAngle = Math.abs(initHeading1 - heading);
 					if(headingAngle > deg2rad(180))
 						headingAngle = normalizeRad(-headingAngle)
@@ -922,9 +919,8 @@ load = function() {
 			
 			// adjust view position and rotation relative to previous panorama
 			
-			var rotDiff = previousCenterHeading == null ? 0 : normalizeRad(previousCenterHeading - centerHeading),
-				vec = $V(viewPos).subtract($V(linkPos)).rotate(-rotDiff, [0,0]);
-			loadPos = viewPos = vec.elements; // TODO check wrong pos after loading
+			var rotDiff = previousCenterHeading == null ? 0 : normalizeRad(previousCenterHeading - centerHeading);
+			loadPos = viewPos = viewPos.subtract(linkPos).rotate(-rotDiff, Vector.Zero(2)); // TODO check wrong pos after loading
 			viewRot[1] += rotDiff;
 			
 			// convert wall depths to coords and merge close walls
@@ -1011,12 +1007,9 @@ update = function() {
 	
 	// view translation and projection matrices
 	
-	var vec = $V(viewPos),
-		dist = vec.distanceFrom(Vector.Zero(2));
-	if(dist > coeff.maxWallRadius) {
-		vec = vec.x(coeff.maxWallRadius/dist);
-		viewPos = vec.elements;
-	}
+	var dist = viewPos.distanceFrom(Vector.Zero(2));
+	if(dist > coeff.maxWallRadius)
+		viewPos = viewPos.x(coeff.maxWallRadius/dist);
 	
 	viewRot[0] = Math.max(viewRot[0], -deg2rad(90));
 	viewRot[0] = Math.min(viewRot[0], deg2rad(90));
@@ -1032,7 +1025,7 @@ update = function() {
 		[1,0,0,0],
 		[0,1,0,0],
 		[0,0,1,0],
-		[-viewPos[0],-coeff.viewHeight,-viewPos[1],1]
+		[-viewPos.elements[0],-coeff.viewHeight,-viewPos.elements[1],1]
 	]));
 	viewMatrix = viewMatrix.x($M([
 		[cy,0,-sy,0],
@@ -1545,7 +1538,7 @@ update = function() {
 		}
 	
 		var scale = (loadDist / coeff.maxLoadDist) + 1;
-		var dist = ($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / scale;
+		var dist = (loadPos.distanceFrom(links3[i][1]) - loadPos.distanceFrom(Vector.Zero(2))) / scale;
 		dist = Math.ceil(dist);
 		dist = Math.max(dist, 0);
 		
@@ -1594,24 +1587,27 @@ update = function() {
 
 // key and event handlers
 
-var isMoving = false;
+var isMoving = false,
+	isLooking = false,
+	lookAccel = false,
+	pressed = {},
+	pressedOnce = {},
+	pressedTimer = false,
+	skipCtr = 0;
 function move(x,z) {
 	isMoving = true;
-	var vec = $V([x,z]).rotate(-viewRot[1], [0,0]);
+	var vec = $V([x,z]).rotate(-viewRot[1], Vector.Zero(2));
 	
-	viewPos = $V(viewPos).add(vec.x(isLoading ? coeff.moveSpeedLoading : coeff.moveSpeed)).elements;
-	loadDistPos = $V(loadDistPos).add(vec.x(isLoading ? coeff.moveSpeedLoading : coeff.moveSpeed)).elements;
-	loadPos = $V(viewPos).add(vec.x(loadDist)).elements;
+	loadDistPos = loadDistPos.add(vec.x(isLoading ? coeff.moveSpeedLoading : coeff.moveSpeed));
+	loadPos = viewPos.add(vec.x(loadDist));
+	viewPos = viewPos.add(vec.x(isLoading ? coeff.moveSpeedLoading : coeff.moveSpeed));
 	
 	setTimeout(load, 1);
 }
 
-var pressed = {},
-	pressedOnce = {},
-	pressedTimer = false,
-	skipCtr = 0;
 function handlePressed() {
 	isMoving = false;
+	isLooking = false;
 	var isPressed = false;
 	for(var key in pressed) {
 		if(pressed[key])
@@ -1634,13 +1630,15 @@ function handlePressed() {
 				move(1,0);
 			break;
 			case 37: // left
-				viewRot[1] -= coeff.viewYawStep;
+				isLooking = true;
+				viewRot[1] -= (lookAccel) ? coeff.viewYawStepAccel : coeff.viewYawStep;
 			break;
 			case 38: // up
 				viewRot[0] -= coeff.viewPitchStep;
 			break;
 			case 39: // right
-				viewRot[1] += coeff.viewYawStep;
+				isLooking = true;
+				viewRot[1] += (lookAccel) ? coeff.viewYawStepAccel : coeff.viewYawStep;
 			break;
 			case 40: // down
 				viewRot[0] += coeff.viewPitchStep;
@@ -1649,12 +1647,13 @@ function handlePressed() {
 		}
 	}
 	
-	if(!isMoving) {
-		loadDistPos = [0,0];
-	}
-	loadDist = $V(loadDistPos).distanceFrom(Vector.Zero(2)) / coeff.loadDistQuota;
+	if(!isMoving)
+		loadDistPos = Vector.Zero(2);
+	loadDist = loadDistPos.distanceFrom(Vector.Zero(2)) / coeff.loadDistQuota;
 	loadDist = Math.max(loadDist,1);
 	loadDist = Math.min(loadDist,coeff.maxLoadDist);
+	
+	lookAccel = isLooking;
 	
 	pressedOnce = [];
 	if(isPressed){
