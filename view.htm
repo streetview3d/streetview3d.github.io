@@ -42,13 +42,6 @@ Look:
 
 <script type="text/javascript">
 
-// TODO fail location
-
-// TODO aspect ratio
-// TODO check fail,browser,os,modes,z-sort,gaps,coeffs
-// TODO check format, todos, comments
-// TODO readme
-
 // global accessible functions and initialization
 
 var load = function() {},
@@ -118,7 +111,7 @@ function transformTriangle(srcImg, dstCtx, vert1, wireframe) {
 		
 		coords[i] = [];
 		for(var j = 0; j < 3; ++j) {
-			vert1[i][j] = pre2[j].x((pre2[j + 3] + Math.min(((i) ? 1/2 : 1/4) / pre1[j + 3], ((i) ? 3 : 3))) / pre2[j + 3]).add(center);
+			vert1[i][j] = pre2[j].x((pre2[j + 3] + Math.min(((i) ? 1/2 : 1/4) / pre1[j + 3], ((i) ? 2 : 2))) / pre2[j + 3]).add(center);
 			coords[i][j] = vert1[i][j].elements;
 		}
 	}
@@ -303,7 +296,7 @@ function getParam(param) {
 
 // global coeffs
 
-var coeff = { // TODO +
+var coeff = {
 	wallNum: 32,
 	wallHeight: 80,
 	camHeight: 2.75,
@@ -663,8 +656,6 @@ load = function() {
 		
 		// load links
 		
-		// TODO missing links
-		
 		function() {
 			var nextCtr = 1;
 			
@@ -909,7 +900,7 @@ load = function() {
 			// adjust view position and rotation relative to previous panorama
 			
 			var rotDiff = (previousCenterHeading == null) ? 0 : normalizeRad(previousCenterHeading - centerHeading);
-			loadPos = viewPos = viewPos.subtract(linkPos).rotate(-rotDiff, Vector.Zero(2)); // TODO check wrong pos after loading
+			loadPos = viewPos = viewPos.subtract(linkPos).rotate(-rotDiff, Vector.Zero(2));
 			viewRot[1] += rotDiff;
 			
 			// convert wall depths to coords and merge close walls
@@ -1037,8 +1028,6 @@ update = function() {
 	]);
 	
 	// build ground and ceiling, translate and rotate
-
-	// TODO vec
 	
 	var ground = [];
 	for(var ceiling = 0; ceiling < 2; ++ceiling) {
@@ -1118,7 +1107,7 @@ update = function() {
 			walls3[i][1] * tex1Size[0] / coeff.wallNum,
 			((walls3[(i + 1) % walls3.length][1] + coeff.wallNum - 1) % coeff.wallNum + 1) * tex1Size[0] / coeff.wallNum,
 			tex1Size[1],
-			tex1Size[1] * 2 / 3, // TODO coeff
+			tex1Size[1] * 2 / 3,
 			0
 		],
 		dstVerts1 = [
@@ -1594,11 +1583,12 @@ function handlePressed() {
 	
 	pressedOnce = [];
 	if(isPressed){
+		setTimeout(handlePressed, coeff.keyInterval);
+		
 		if(!isLoading)
 			skipCtr = 0;
 		if(!(skipCtr++ % coeff.keyIntervalLoadingMult))
 			setTimeout(update, 1);
-		setTimeout(handlePressed, coeff.keyInterval);
 	}
 	else {
 		pressedTimer = false;

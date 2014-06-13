@@ -2,7 +2,7 @@
 
 _Navigate smoothly through Google Street View in a reconstructed 3D scene._
 
-While traditional Street View offers a single-perspective panorama with controls for switching to adjacent panoramas, Street View 3D utilizes depth information to show the scene from different perspectives, which works with plain HTML5. There are 3D buildings in Google Earth, but this is not available for all places nor does it run in the browser.
+Whereas traditional Street View offers panoramas from a single perspective, Street View 3D utilizes depth information to reconstruct a 3D scene. Street View 3D works with plain HTML5. There are 3D buildings in Google Earth, but this is not available for all places nor does it run in the browser.
 
 The location can be specified in the browser's address bar by typing in the address of the desired location or its geographical coordinates, as they are found on Google Maps.
 
@@ -23,15 +23,11 @@ Mobile devices often have no keyboards. Press "Show buttons" to steer on a touch
 
 ### Compass
 
-Move in the 
+The arrows at the bottom show the directions to adjacent panoramas. The numbers on it indicate the distance.
 
-### Performance
+### Performance and Quality
 
-smaller
-
-### High Quality Mode
-
-
+The quality of the composed image is a tradeoff between rendering correctness and performance. If the performance is still not satisfying in your case, reduce the size of your browser window. A smaller window means higher performance. To increase the quality, switch "HQ OFF" to "HQ ON" by clicking on it.
 
 ### Tested Browser compatibility
 
