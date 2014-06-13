@@ -361,10 +361,11 @@ var coeff = { // TODO +
 	compassSizeQuota: 32,
 	loadDistQuota: 1.5, 
 	maxLoadDist: 40,
-	moveSpeed: 1.5,
-	moveSpeedLoading: 0.75,
+	moveSpeed: 2.5,
+	moveSpeedLoading: .5,
 	viewYawStep: deg2rad(360/32),
 	viewPitchStep: deg2rad(90/8),
+	viewHeight: 5,
 	keyInterval: 100,
 	keyIntervalLoadingMult: 5
 };
@@ -1031,7 +1032,7 @@ update = function() {
 		[1,0,0,0],
 		[0,1,0,0],
 		[0,0,1,0],
-		[-viewPos[0],-5,-viewPos[1],1]
+		[-viewPos[0],-coeff.viewHeight,-viewPos[1],1]
 	]));
 	viewMatrix = viewMatrix.x($M([
 		[cy,0,-sy,0],
@@ -1508,12 +1509,25 @@ update = function() {
 	
 	// draw compass to buffer
 	
+	var nearestAngle = coeff.compassTolerance,
+		selectedHeading = null;
 	for(var i = 0; i < links3.length; ++i) {
 		var heading = normalizeRad(coeff.compassTolerance - links3[i][2] - viewRot[1]),
-			linkCoords,
-			linkSize;
+			headingAngle = Math.abs(heading - coeff.compassTolerance);
+		if(nearestAngle > headingAngle) {
+			nearestAngle = headingAngle;
+			selectedHeading = i;
+		};
+	}
+	
+	for(var i = 0; i < links3.length; ++i) {
+		var heading = normalizeRad(coeff.compassTolerance - links3[i][2] - viewRot[1]),
+			front = false,
+			linkSize,
+			linkCoords;
 		
 		if(heading < (coeff.compassTolerance*2)) {
+			front = true;
 			linkSize = outSize[1] / coeff.compassSizeQuota;
 			linkCoords = [
 				heading / (coeff.compassTolerance*2) * outSize[0],
@@ -1529,14 +1543,16 @@ update = function() {
 				-1
 			];
 		}
-
+	
 		var scale = (loadDist / coeff.maxLoadDist) + 1;
-		var dist = Math.ceil(($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / scale);
+		var dist = ($V(loadPos).distanceFrom($V(links3[i][1])) - $V(loadPos).distanceFrom(Vector.Zero(2))) / scale;
+		dist = Math.ceil(dist);
+		dist = Math.max(dist, 0);
 		
 		buf.save();
 		buf.translate(linkCoords[0],linkCoords[1]);
 		
-		buf.fillStyle = (heading >= (coeff.compassTolerance*2) || dist > 0) ? '#0f0' : '#fff';
+		buf.fillStyle = (front && !dist && selectedHeading == i) ? '#fff' : '#0f0';
 		buf.strokeStyle = '#000';
 		buf.lineWidth = 1;
 		buf.beginPath();
@@ -1547,7 +1563,7 @@ update = function() {
 		buf.fill();
 		buf.stroke();
 		
-		if(heading < (coeff.compassTolerance*2) && dist > 0) {
+		if(front) {
 			buf.fillStyle = '#fff';
 			buf.font = 'bold ' + (linkSize*3/4) + 'px sans-serif';
 			buf.textAlign = 'center';
