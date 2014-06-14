@@ -4,14 +4,11 @@ _Navigate smoothly through Google Street View in a reconstructed 3D scene._
 
 Whereas traditional Street View offers panoramas from a single perspective, Street View 3D utilizes depth information to reconstruct a 3D scene. Street View 3D works with plain HTML5. There are 3D buildings in Google Earth, but this is not available for all places nor does it run in the browser.
 
-The location can be specified in the browser's address bar by typing in the address of the desired location or its geographical coordinates, as they are found on Google Maps.
+The location can be specified in the browser's address bar by typing in the geographical coordinates, as they are found on Google Maps.
 
-* [https://streetview3d.github.io/view.htm?loc=39.955041,-75.176962](https://streetview3d.github.io/view.htm?loc=39.955041,-75.176962) Philadelphia
-* [https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091](https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091) Atlanta
-* [https://streetview3d.github.io/view.htm?loc=35.677337,139.763216](https://streetview3d.github.io/view.htm?loc=35.677337,139.763216) Tokyo
-* [https://streetview3d.github.io/view.htm?loc=33.483872,-112.070874](https://streetview3d.github.io/view.htm?loc=33.483872,-112.070874) Venture
-
-More locations in progress...
+* [https://streetview3d.github.io/view.htm?loc=39.296386,-76.613949&dir=s](https://streetview3d.github.io/view.htm?loc=39.296386,-76.613949&dir=s) Baltimore, MD, USA
+* [https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091&dir=e](https://streetview3d.github.io/view.htm?loc=33.788993,-84.384091&dir=e) Atlanta, GA, USA
+* [https://streetview3d.github.io/view.htm?loc=35.691221,139.714022&dir=e](https://streetview3d.github.io/view.htm?loc=35.691221,139.714022&dir=e) Tokyo, Japan
 
 ### Control Keys
 
