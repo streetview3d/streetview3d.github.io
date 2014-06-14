@@ -52,7 +52,8 @@ var load = function() {},
 	forceLoad = false;
 $(function() {
 
-var abortOnFail = false;
+var failed = false,
+	abortOnFail = false;
 $('#fail_js').hide();
 
 jQuery.fx.interval = Math.max(jQuery.fx.interval, 50);
@@ -339,9 +340,9 @@ var coeff = {
 	loadTolerance: deg2rad(45),
 	compassTolerance: deg2rad(135/2),
 	compassSizeQuota: 32,
-	loadDistQuota: 1.5, 
-	maxLoadDist: 40,
-	loadDistSideQuota: 8,
+	loadDistQuota: 2, 
+	maxLoadDist: 20,
+	loadDistSideQuota: 4,
 	moveSpeed: 2.5,
 	viewYawStep: deg2rad(360/128),
 	viewYawStepAccel: deg2rad(360/32),
@@ -439,27 +440,49 @@ load = function() {
 		texImg1[2].getContext('2d')
 	];
 	
-	var keyValid = false,
-		panoImg,
+	var panoImg,
 		walls1,
 		links1 = [],
 		links2 = [];
 	
 	// manage and serialize asynchronous calls
 	
-	var step = 0;
-	function next() {
-		if(step < steps.length)
-			setTimeout(steps[step++], 1);
-	}
-	function retry() { // TODO load retry & timeout
-		setTimeout(steps[step], 1);
+	var stepCtr = -1;
+	var tryCtr1 = 0;
+	var retryTimer = null;
+	var failTimer = null;
+	function next(tryCtr3) {
+		if(tryCtr1 == tryCtr3) {
+			clearTimeout(retryTimer);
+			clearTimeout(failTimer);
+			if(!failed) {
+				$('#fail_key').hide();
+				$('#outImg').show();
+			}
+		
+			if(stepCtr + 1 < steps.length) {
+				retryTimer = setTimeout(function() {
+					tryCtr1++;
+					setTimeout(steps[stepCtr], 1);
+				}, 2000);
+				failTimer = setTimeout(function() {
+					if(!failed) {
+						$('#fail_key').show();
+						$('#outImg').hide();
+					}
+				}, 4000);
+			
+				setTimeout(steps[++stepCtr], 1);
+			}
+		}
 	}
 	var steps = [
 		
 		// load panoId for address or use an explicit one
 		
 		function() {
+			var tryCtr2 = tryCtr1;
+			
 			var query = getParam('loc');
 			if(!query.length) {
 				$('#fail_query').show();
@@ -467,11 +490,6 @@ load = function() {
 				abortOnFail = true;
 				throw null;
 			}
-			
-			setTimeout(function() {
-				if(!keyValid)
-					$('#fail_key').show();
-			}, 4000);
 			
 			if(initialLoading) {
 				new google.maps.Geocoder().geocode(
@@ -490,22 +508,21 @@ load = function() {
 							throw e;
 						}
 						
-						next();
+						next(tryCtr2);
 					}
 				);
 			}
 			else {
-				next();
+				next(tryCtr2);
 			}
 		},
 		
 		// load panorama details
 		
 		function() {
+			var tryCtr2 = tryCtr1;
+			
 			var success = function(data) {
-				keyValid = true;
-				$('#fail_key').hide();
-				
 				try {
 					panoId = data.location.pano;
 					centerHeading = deg2rad(data.tiles.centerHeading);
@@ -518,7 +535,7 @@ load = function() {
 					throw e;
 				}
 				
-				next();
+				next(tryCtr2);
 			}
 			
 			if(initialLoading) {
@@ -539,12 +556,11 @@ load = function() {
 		// load depth map
 		
 		function() {
+			var tryCtr2 = tryCtr1;
+			
 			$.ajax({
 				url: 'https://maps.google.com/cbk?output=json&dm=1&pm=1&ph=1&panoid='+panoId,
 				dataType: 'jsonp',
-				error: function() {
-					throw null;
-				},
 				success: function(data) {
 					latLng = new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng);
 					
@@ -627,19 +643,21 @@ load = function() {
 					
 					walls1 = depthMap5;
 					
-					next();
+					next(tryCtr2);
 				}
 			});
 		},
 		
-		// load panorama bitmap
+		// load panorama bitmap and links
 		
 		function() {
+			var tryCtr2 = tryCtr1,
+				nextCtr = 1;
+			
 			panoImg = document.createElement('canvas');
 			panoImg.width = panoSize[0];
 			panoImg.height = panoSize[1];
 			
-			var nextCtr = 1;
 			for(var y1 = 0, y2 = 0; y2 < panoSize[1]; ++y1, y2 += tileSize[1]) {
 				for(var x1 = 0, x2 = 0; x2 < panoSize[0]; ++x1, x2 += tileSize[0]) {
 					nextCtr++;
@@ -649,24 +667,14 @@ load = function() {
 							panoImg.getContext('2d').drawImage(tileImg,x2,y2);
 							
 							if(!--nextCtr)
-								next();
-						}
-						tileImg.onerror = function() {
-							throw null;
+								next(tryCtr2);
 						}
 						tileImg.src = 'https://cbk0.google.com/cbk?output=tile&zoom='+zoomLevel+'&x='+x1+'&y='+y1+'&panoid='+panoId;
 					})(x1,x2,y1,y2);
 				}
 			}
 			
-			if(!--nextCtr)
-				next();
-		},
-		
-		// load links
-		
-		function() {
-			var nextCtr = 1;
+			// load links
 			
 			for(var i = 0; i < links1.length; ++i) {
 				nextCtr++;
@@ -674,9 +682,6 @@ load = function() {
 					$.ajax({
 						url: 'https://maps.google.com/cbk?output=json&dm=1&pm=1&ph=1&panoid='+link[0],
 						dataType: 'jsonp',
-						error: function() {
-							throw null;
-						},
 						success: function(data) {
 							var dist1 = google.maps.geometry.spherical.computeDistanceBetween(link[1], new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)),
 								vec = $V([0,dist1]).rotate(-link[2], Vector.Zero(2));
@@ -715,7 +720,7 @@ load = function() {
 								]);
 								
 								if(!--nextCtr)
-									next();
+									next(tryCtr2);
 							}
 						}
 					});
@@ -724,13 +729,14 @@ load = function() {
 			}
 			
 			if(!--nextCtr)
-				next();
+				next(tryCtr2);
 		},
 		
 		// prepare ground, ceiling and wall textures
 		
 		function() {
-			var nextCtr = 1,
+			var tryCtr2 = tryCtr1,
+				nextCtr = 1,
 				callList1 = [],
 				callList2 = [];
 			
@@ -793,7 +799,7 @@ load = function() {
 				setTimeout(async1, 1);
 				
 				if(!--nextCtr)
-					next();
+					next(tryCtr2);
 			}
 			
 			for(var ceiling = 0; ceiling < 2; ++ceiling) {
@@ -857,7 +863,7 @@ load = function() {
 				setTimeout(async2, 1);
 				
 				if(!--nextCtr)
-					next();
+					next(tryCtr2);
 			}
 			
 			for(var pitch = 0; pitch < coeff.loadWallPitchNum; ++pitch) {
@@ -869,12 +875,13 @@ load = function() {
 			setTimeout(async2, 1);
 			
 			if(!--nextCtr)
-				next();
+				next(tryCtr2);
 		},
 		
 		// finish loading and initiate update
 		
 		function() {
+			next(tryCtr1);
 			
 			// configure initial heading
 			
@@ -945,7 +952,7 @@ load = function() {
 	
 	// begin with first step
 	
-	next();
+	next(tryCtr1);
 }
 
 // display update routine
@@ -1650,6 +1657,7 @@ $(window).resize(function() {
 });
 
 $(window).error(function() {
+	failed = true;
 	if(!abortOnFail) {
 		$('#fail_gen').show();
 		$('#outImg').hide();
