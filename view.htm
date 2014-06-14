@@ -59,10 +59,10 @@ jQuery.fx.interval = Math.max(jQuery.fx.interval, 50);
 
 // convert polar coordinates to equirectangular projection
 
-function radialCoord(center, angle, radius) {
+function radialCoord(center, angle, radius, invertY) {
 	return [
-		center[0] + Math.cos(angle) * radius,
-		center[1] + Math.sin(angle) * radius
+		center[0] + Math.sin(angle) * radius,
+		center[1] + Math.cos(angle) * radius * ((invertY) ? -1 : 1)
 	];
 }
 
@@ -336,18 +336,18 @@ var coeff = {
 		8
 	],
 	skipTolerance: deg2rad(45),
+	loadTolerance: deg2rad(45),
 	compassTolerance: deg2rad(135/2),
 	compassSizeQuota: 32,
 	loadDistQuota: 1.5, 
 	maxLoadDist: 40,
+	loadDistSideQuota: 8,
 	moveSpeed: 2.5,
-	moveSpeedLoading: .5,
 	viewYawStep: deg2rad(360/128),
 	viewYawStepAccel: deg2rad(360/32),
 	viewPitchStep: deg2rad(90/8),
 	viewHeight: 5,
-	keyInterval: 100,
-	keyIntervalLoadingMult: 5
+	keyInterval: 100
 };
 
 // constant query parameters
@@ -364,10 +364,11 @@ var viewPos = $V([.07,.03]),
 	loadPos = viewPos,
 	loadDistPos = Vector.Zero(2),
 	loadDist = 1,
-	viewRot = [0,-deg2rad(90)],
+	viewRot = [0,0],
 	latLng = null,
 	panoId = null,
-	centerHeading = null;
+	centerHeading = null,
+	fade = false;
 
 // loaded resources
 
@@ -378,8 +379,8 @@ var texImg2 = null,
 
 // panorama load routine
 
-var initialLoading = true;
-var isLoading = false;
+var initialLoading = true,
+	isLoading = false;
 
 load = function() {
 
@@ -393,7 +394,7 @@ load = function() {
 	
 	var linkPos = Vector.Zero(2),
 		previousCenterHeading = centerHeading,
-		nearestAngle = coeff.compassTolerance;
+		nearestAngle = coeff.loadTolerance;
 	for(var i = 0; i < links3.length; ++i) {
 		var posLinkDist = loadPos.distanceFrom(links3[i][1]),
 			posCenterDist = loadPos.distanceFrom(Vector.Zero(2)),
@@ -406,11 +407,16 @@ load = function() {
 		}
 	}
 	
-	if(!forceLoad && !initialLoading && nearestAngle == coeff.compassTolerance) {
+	if(!forceLoad && !initialLoading && nearestAngle == coeff.loadTolerance) {
 		isLoading = false;
 		return;
 	}
 	forceLoad = false;
+	
+	// fade output image
+	
+	$('#outImg').finish();
+	$('#outImg').fadeTo(0,.5);
 	
 	// declare temporary buffers
 	
@@ -446,6 +452,9 @@ load = function() {
 		if(step < steps.length)
 			setTimeout(steps[step++], 1);
 	}
+	function retry() { // TODO
+		setTimeout(steps[step], 1);
+	}
 	var steps = [
 		
 		// load panoId for address or use an explicit one
@@ -464,10 +473,7 @@ load = function() {
 					$('#fail_key').show();
 			}, 4000);
 			
-			if(!initialLoading) {
-				next();
-			}
-			else {
+			if(initialLoading) {
 				new google.maps.Geocoder().geocode(
 					{
 						address: query
@@ -487,6 +493,9 @@ load = function() {
 						next();
 					}
 				);
+			}
+			else {
+				next();
 			}
 		},
 		
@@ -512,16 +521,16 @@ load = function() {
 				next();
 			}
 			
-			if(!initialLoading) {
-				new google.maps.StreetViewService().getPanoramaById(
-					panoId,
+			if(initialLoading) {
+				new google.maps.StreetViewService().getPanoramaByLocation(
+					latLng,
+					50,
 					success
 				);
 			}
 			else {
-				new google.maps.StreetViewService().getPanoramaByLocation(
-					latLng,
-					50,
+				new google.maps.StreetViewService().getPanoramaById(
+					panoId,
 					success
 				);
 			}
@@ -543,7 +552,7 @@ load = function() {
 						links1[i] = [
 							data.Links[i].panoId,
 							latLng,
-							deg2rad(parseFloat(data.Links[i].yawDeg)),
+							normalizeRad(deg2rad(parseFloat(data.Links[i].yawDeg)) - centerHeading),
 							Vector.Zero(2)
 						];
 					}
@@ -670,23 +679,21 @@ load = function() {
 						},
 						success: function(data) {
 							var dist1 = google.maps.geometry.spherical.computeDistanceBetween(link[1], new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng)),
-								heading1 = normalizeRad(link[2] - centerHeading - deg2rad(90)),
-								vec = $V([0,dist1]).rotate(-heading1, Vector.Zero(2));
+								vec = $V([0,dist1]).rotate(-link[2], Vector.Zero(2));
 							
 							link[3] = link[3].add(vec);
 							
 							var dist2 = link[3].distanceFrom(Vector.Zero(2));
-							
 							if(dist2 < coeff.skipLinkDist && data.Links.length == 2) {
 								for(var i = 0; i < data.Links.length; ++i) {
-									var heading2 = deg2rad(parseFloat(data.Links[i].yawDeg));
+									var heading = normalizeRad(deg2rad(parseFloat(data.Links[i].yawDeg)) - centerHeading);
 									
-									if(Math.abs(link[2] - heading2) < coeff.skipTolerance
-									|| Math.abs(link[2] - heading2) > normalizeRad(-coeff.skipTolerance)) {
+									if(Math.abs(link[2] - heading) < coeff.skipTolerance
+									|| Math.abs(link[2] - heading) > normalizeRad(-coeff.skipTolerance)) {
 										link = [
 											data.Links[i].panoId,
 											new google.maps.LatLng(data.Location.original_lat, data.Location.original_lng),
-											heading2,
+											heading,
 											link[3]
 										];
 										nextLink(link);
@@ -704,7 +711,7 @@ load = function() {
 								links2.push([
 									link[0],
 									link[3],
-									normalizeRad(Math.atan2(link[3].elements[1], link[3].elements[0]) - deg2rad(90))
+									normalizeRad(Math.atan2(link[3].elements[0], link[3].elements[1]))
 								]);
 								
 								if(!--nextCtr)
@@ -765,8 +772,8 @@ load = function() {
 						[srcCoords1[1], srcCoords2[0]]
 					],
 					dstCoords1 = [
-						yaw * pre[3],
-						(yaw+1) * pre[3],
+						yaw * pre[3] + (Math.PI),
+						(yaw+1) * pre[3] + (Math.PI),
 						pitch1 * pre[5],
 						pitch2 * pre[5]
 					],
@@ -775,10 +782,10 @@ load = function() {
 						dstCoords1[2] * ((!(yaw % 2)) ? pre[4] : 1)
 					],
 					dstCoords3 = [
-						radialCoord(pre[6], dstCoords1[0], dstCoords2[0]),
-						radialCoord(pre[6], dstCoords1[0], dstCoords1[3]),
-						radialCoord(pre[6], dstCoords1[1], dstCoords1[3]),
-						radialCoord(pre[6], dstCoords1[1], dstCoords2[1])
+						radialCoord(pre[6], dstCoords1[0], dstCoords2[0], true),
+						radialCoord(pre[6], dstCoords1[0], dstCoords1[3], true),
+						radialCoord(pre[6], dstCoords1[1], dstCoords1[3], true),
+						radialCoord(pre[6], dstCoords1[1], dstCoords2[1], true)
 					];
 					transformQuad1(panoImg, (ceiling) ? tex1[2] : tex1[1], [[$V(srcCoords3[0]), $V(srcCoords3[1]), $V(srcCoords3[2]), $V(srcCoords3[3])], [$V(dstCoords3[0]), $V(dstCoords3[1]), $V(dstCoords3[2]), $V(dstCoords3[3])]], !pitch);
 				}
@@ -881,10 +888,10 @@ load = function() {
 				case 's': initHeading1 = deg2rad(180); break;
 				case 'w': initHeading1 = deg2rad(270); break;
 				}
-				initHeading1 = normalizeRad(initHeading1 - centerHeading - deg2rad(90));
+				initHeading1 = normalizeRad(initHeading1 - centerHeading);
 				
 				for(var i = 0; i < links2.length; ++i) {
-					var heading = normalizeRad(Math.atan2(links2[i][1].elements[1], links2[i][1].elements[0]) - deg2rad(90)),
+					var heading = normalizeRad(Math.atan2(links2[i][1].elements[0], links2[i][1].elements[1])),
 						headingAngle = Math.abs(initHeading1 - heading);
 					if(headingAngle > deg2rad(180))
 						headingAngle = normalizeRad(-headingAngle)
@@ -917,7 +924,7 @@ load = function() {
 				}
 				
 				walls2.push([
-					radialCoord([0,0], -(i / coeff.wallNum * (Math.PI*2)), walls1[i]),
+					radialCoord([0,0], i / coeff.wallNum * (Math.PI*2) + (Math.PI), walls1[i], false),
 					i
 				]);
 				mergeNext = true;
@@ -945,7 +952,7 @@ load = function() {
 
 var isUpdating = false,
 	requiresUpdate = false,
-	fade = false;
+	updateOnce = true;
 
 update = function() {
 	
@@ -957,10 +964,11 @@ update = function() {
 	// handle concurrent event
 	
 	requiresUpdate = true;
-	if(isUpdating)
+	if(isUpdating || (isLoading && !updateOnce))
 		return;
 	isUpdating = true;
 	requiresUpdate = false;
+	updateOnce = !isLoading;
 	
 	// update dimensions, set canvas properties and clear buffer
 	
@@ -1428,11 +1436,11 @@ update = function() {
 	
 	// draw compass to buffer
 	
-	var nearestAngle = coeff.compassTolerance,
-		selectedHeading = null;
+	var nearestAngle = coeff.loadTolerance,
+		selectedHeading = -1;
 	for(var i = 0; i < links3.length; ++i) {
-		var heading = normalizeRad(coeff.compassTolerance - links3[i][2] - viewRot[1]),
-			headingAngle = Math.abs(heading - coeff.compassTolerance);
+		var heading = normalizeRad(coeff.loadTolerance + links3[i][2] - viewRot[1]),
+			headingAngle = Math.abs(heading - coeff.loadTolerance);
 		if(nearestAngle > headingAngle) {
 			nearestAngle = headingAngle;
 			selectedHeading = i;
@@ -1440,7 +1448,7 @@ update = function() {
 	}
 	
 	for(var i = 0; i < links3.length; ++i) {
-		var heading = normalizeRad(coeff.compassTolerance - links3[i][2] - viewRot[1]),
+		var heading = normalizeRad(coeff.compassTolerance + links3[i][2] - viewRot[1]),
 			front = false,
 			linkSize,
 			linkCoords;
@@ -1497,9 +1505,10 @@ update = function() {
 	
 	out.drawImage(bufImg,0,0);
 	
+	// fade output image
+	
 	if(fade) {
 		$('#outImg').finish();
-		$('#outImg').fadeTo(0,.5);
 		$('#outImg').fadeTo(500,1);
 		fade = false;
 	}
@@ -1513,20 +1522,23 @@ update = function() {
 
 // key and event handlers
 
+// TODO load retry & timeout
+
 var isMoving = false,
 	isLooking = false,
 	lookAccel = false,
 	pressed = {},
 	pressedOnce = {},
-	pressedTimer = false,
-	skipCtr = 0;
-function move(x,z) {
+	pressedTimer = false;
+function move(x,z,loadDistAhead) {
 	isMoving = true;
-	var vec = $V([x,z]).rotate(-viewRot[1], Vector.Zero(2));
 	
-	loadDistPos = loadDistPos.add(vec.x((isLoading) ? coeff.moveSpeedLoading : coeff.moveSpeed));
-	loadPos = viewPos.add(vec.x(loadDist));
-	viewPos = viewPos.add(vec.x((isLoading) ? coeff.moveSpeedLoading : coeff.moveSpeed));
+	var loadSpeed = Math.max((loadDistAhead) ? loadDist : loadDist / coeff.loadDistSideQuota, coeff.moveSpeed + 1),
+		vec = $V([x,z]).rotate(-viewRot[1], Vector.Zero(2));
+
+	viewPos = viewPos.add(vec.x(coeff.moveSpeed));
+	loadDistPos = loadDistPos.add(vec.x(coeff.moveSpeed));
+	loadPos = loadPos.add(vec.x(loadSpeed));
 	
 	setTimeout(load, 1);
 }
@@ -1534,6 +1546,8 @@ function move(x,z) {
 function handlePressed() {
 	isMoving = false;
 	isLooking = false;
+	loadPos = viewPos;
+	
 	var isPressed = false;
 	for(var key in pressed) {
 		if(pressed[key])
@@ -1544,16 +1558,16 @@ function handlePressed() {
 			isPressed = true;
 			switch(parseInt(key)) {
 			case 87: // w
-				move(0,1);
+				move(0,1,true);
 			break;
 			case 65: // a
-				move(-1,0);
+				move(-1,0,false);
 			break;
 			case 83: // s
-				move(0,-1);
+				move(0,-1,false);
 			break;
 			case 68: // d
-				move(1,0);
+				move(1,0,false);
 			break;
 			case 37: // left
 				isLooking = true;
@@ -1576,7 +1590,6 @@ function handlePressed() {
 	if(!isMoving)
 		loadDistPos = Vector.Zero(2);
 	loadDist = loadDistPos.distanceFrom(Vector.Zero(2)) / coeff.loadDistQuota;
-	loadDist = Math.max(loadDist,1);
 	loadDist = Math.min(loadDist,coeff.maxLoadDist);
 	
 	lookAccel = isLooking;
@@ -1586,8 +1599,6 @@ function handlePressed() {
 		setTimeout(handlePressed, coeff.keyInterval);
 		
 		if(!isLoading)
-			skipCtr = 0;
-		if(!(skipCtr++ % coeff.keyIntervalLoadingMult))
 			setTimeout(update, 1);
 	}
 	else {
