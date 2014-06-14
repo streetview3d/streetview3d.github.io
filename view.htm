@@ -452,7 +452,7 @@ load = function() {
 		if(step < steps.length)
 			setTimeout(steps[step++], 1);
 	}
-	function retry() { // TODO
+	function retry() { // TODO load retry & timeout
 		setTimeout(steps[step], 1);
 	}
 	var steps = [
@@ -1522,8 +1522,6 @@ update = function() {
 
 // key and event handlers
 
-// TODO load retry & timeout
-
 var isMoving = false,
 	isLooking = false,
 	lookAccel = false,
@@ -1556,33 +1554,35 @@ function handlePressed() {
 	for(var key in pressedOnce) {
 		if(pressedOnce[key]) {
 			isPressed = true;
-			switch(parseInt(key)) {
-			case 87: // w
-				move(0,1,true);
-			break;
-			case 65: // a
-				move(-1,0,false);
-			break;
-			case 83: // s
-				move(0,-1,false);
-			break;
-			case 68: // d
-				move(1,0,false);
-			break;
-			case 37: // left
-				isLooking = true;
-				viewRot[1] -= (lookAccel) ? coeff.viewYawStepAccel : coeff.viewYawStep;
-			break;
-			case 38: // up
-				viewRot[0] -= coeff.viewPitchStep;
-			break;
-			case 39: // right
-				isLooking = true;
-				viewRot[1] += (lookAccel) ? coeff.viewYawStepAccel : coeff.viewYawStep;
-			break;
-			case 40: // down
-				viewRot[0] += coeff.viewPitchStep;
-			break;
+			if(!isLoading) {
+				switch(parseInt(key)) {
+				case 87: // w
+					move(0,1,true);
+				break;
+				case 65: // a
+					move(-1,0,false);
+				break;
+				case 83: // s
+					move(0,-1,false);
+				break;
+				case 68: // d
+					move(1,0,false);
+				break;
+				case 37: // left
+					isLooking = true;
+					viewRot[1] -= (lookAccel) ? coeff.viewYawStepAccel : coeff.viewYawStep;
+				break;
+				case 38: // up
+					viewRot[0] -= coeff.viewPitchStep;
+				break;
+				case 39: // right
+					isLooking = true;
+					viewRot[1] += (lookAccel) ? coeff.viewYawStepAccel : coeff.viewYawStep;
+				break;
+				case 40: // down
+					viewRot[0] += coeff.viewPitchStep;
+				break;
+				}
 			}
 		}
 	}
