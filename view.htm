@@ -977,7 +977,7 @@ update = function() {
 	requiresUpdate = false;
 	updateOnce = !isLoading;
 	
-	// update dimensions, set canvas properties and clear buffer
+	// update dimensions, set canvas properties
 	
 	var btnSize = $('body').width()/20;
 	$('.btn').width(btnSize);
@@ -988,17 +988,9 @@ update = function() {
 	outImg.height = 1;
 	var outSize = [$('#outCont').width(),$('#outCont').height()];
 	
-	var bufImg = document.createElement('canvas');
-	bufImg.width = outSize[0];
-	bufImg.height = outSize[1];
-	var buf = bufImg.getContext('2d');
-	
 	outImg.width = outSize[0];
 	outImg.height = outSize[1];
-	var out = outImg.getContext('2d');
-	
-	buf.fillStyle = '#000';
-	buf.fillRect(0, 0, outSize[0], outSize[1]);
+	var buf = outImg.getContext('2d');
 	
 	// view translation and projection matrices
 	
@@ -1034,13 +1026,12 @@ update = function() {
 		[0,-sx,cx,0],
 		[0,0,0,1]
 	]));
-	
-	var projMatrix = $M([
+	viewMatrix = viewMatrix.x($M([
 		[outSize[1]/outSize[0],0,0,0],
 		[0,1,0,0],
 		[0,0,1,1],
 		[0,0,0,0]
-	]);
+	]));
 	
 	// build ground and ceiling, translate and rotate
 	
@@ -1048,11 +1039,11 @@ update = function() {
 	for(var ceiling = 0; ceiling < 2; ++ceiling) {
 		var tbl = (ceiling) ? coeff.ceilingTbl : coeff.groundTbl,
 			tblMax = (ceiling) ? coeff.ceilingTblMax : coeff.groundTblMax;
-		for(var i = 0; i < tbl.length; ++i) {
+		for(var i = 0; i < tbl.length - 1; ++i) {
 			var i1 = tbl[i],
 				i2 = tbl[i + 1];
 		
-			for(var j = 0; j < tbl.length; ++j) {
+			for(var j = 0; j < tbl.length - 1; ++j) {
 				var j1 = tbl[j],
 					j2 = tbl[j + 1];
 			
@@ -1085,7 +1076,6 @@ update = function() {
 					tmp[3] = 1;
 					tmp = $M([tmp]);
 					tmp = tmp.x(viewMatrix);
-					tmp = tmp.x(projMatrix);
 					tmp = tmp.elements[0];
 					dstVerts2[k] = $V([
 						tmp[0],
@@ -1158,7 +1148,6 @@ update = function() {
 				tmp[3] = 1;
 				tmp = $M([tmp]);
 				tmp = tmp.x(viewMatrix);
-				tmp = tmp.x(projMatrix);
 				tmp = tmp.elements[0];
 				dstVerts2[j][k] = $V([
 					tmp[0],
@@ -1413,24 +1402,24 @@ update = function() {
 				];
 			}
 			
-			if(dstCoords[0][0] <= 0
-			&& dstCoords[1][0] <= 0
-			&& dstCoords[2][0] <= 0)
+			if(dstCoords[0][0] < 0
+			&& dstCoords[1][0] < 0
+			&& dstCoords[2][0] < 0)
 				continue;
 			
-			if(dstCoords[0][0] > outSize[0]
-			&& dstCoords[1][0] > outSize[0]
-			&& dstCoords[2][0] > outSize[0])
+			if(dstCoords[0][0] >= outSize[0]
+			&& dstCoords[1][0] >= outSize[0]
+			&& dstCoords[2][0] >= outSize[0])
 				continue;
 			
-			if(dstCoords[0][1] <= 0
-			&& dstCoords[1][1] <= 0
-			&& dstCoords[2][1] <= 0)
+			if(dstCoords[0][1] < 0
+			&& dstCoords[1][1] < 0
+			&& dstCoords[2][1] < 0)
 				continue;
 			
-			if(dstCoords[0][1] > outSize[1]
-			&& dstCoords[1][1] > outSize[1]
-			&& dstCoords[2][1] > outSize[1])
+			if(dstCoords[0][1] >= outSize[1]
+			&& dstCoords[1][1] >= outSize[1]
+			&& dstCoords[2][1] >= outSize[1])
 				continue;
 			
 			var normal = $V([dstCoords[2][0]-dstCoords[0][0],dstCoords[2][1]-dstCoords[0][1],0]).cross($V([dstCoords[1][0]-dstCoords[0][0],dstCoords[1][1]-dstCoords[0][1],0]));
@@ -1507,10 +1496,6 @@ update = function() {
 		
 		buf.restore();
 	}
-	
-	// swap buffer
-	
-	out.drawImage(bufImg,0,0);
 	
 	// fade output image
 	
